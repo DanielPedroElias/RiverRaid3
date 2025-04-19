@@ -31,4 +31,4 @@ O **WebSocket** é um protocolo que permite uma comunicação **contínua e bidi
 
 ## Jogo Escolhido
 
-O jogo será uma **inspiração no clássico *[River Raid](https://pt.wikipedia.org/wiki/River_Raid)***, adaptado para atender todos os requisitos mencionados. A proposta é manter a essência de progressão vertical, obstáculos e coleta de itens, mas integrando os conceitos de **jogo multiplayer em rede**, **sincronização de estados**, e controle em tempo real com **sockets via WebSocket** com o motor gráfico **Pyxel**.
+O jogo será uma **inspiração no clássico *[River Raid](https://pt.wikipedia.org/wiki/River_Raid)***, adaptado para atender todos os requisitos mencionados.
