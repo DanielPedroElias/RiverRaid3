@@ -2,11 +2,8 @@
 ### Professor: Maxwell
 ### Alunos: Daniel Pedro Elias dos Santos e Gabriel Neves Silveira
 ###
-### Arquivo com o código fonte do "River Raid 3"
-### - Este codigo usa a engine Pyxel para criar a base do jogo.
-### - O objetivo eh explorar o funcionamento de comunicacao entre cliente e servidor em um ambiente de jogo
-###
-### Para mais detalhes sobre o projeto, consulte o arquivo README.md
+### Arquivo principal que coordena todo o jogo
+### Para mais detalhes sobre o projeto, consulte o arquivo "README.md" e os arquivos do codigo fonte
 ###
 ### Para executar: 
 ### 1. pyxel run main.py
@@ -17,95 +14,52 @@
 
 # Bibliotecas
 import pyxel
+from network import NetworkManager
+from states import MenuState, GameState, MultiplayerMenuState
+from config import *
 
 # Seguindo as recomendacoes do github oficial do Pyxel de encapsular o codigo do Pyxel em uma classe:
 # Classe principal do jogo
 class Game:
     # Construtor
-    def __init__(self): # self eh o objeto atual
-        ## Atributos
-        # Tamanho da tela
-        self.largura_tela = 160
-        self.altura_tela = 120
+    # Inicializa o jogo: configuracoes, rede e primeiro estado
+    def __init__(self):
+        self.is_fullscreen = True # Variavel que guarda se o jogo esta ou nao em tela cheia
 
-        # Posicao do jogador
-        self._player_x = 50
-        self._player_y = 50
-
-        # TODO: Implementar conexao em rede para poder dar utilidade para essa variavel
-        # Posicao do segundo jogador
-        self._player2_x = 50
-        self._player2_y = 50
-
-        # Pontuacao
-        self.__pontuacao = 0
-        self.tempo_atualizacao = 0 # Contador de tempo
-        self.intervalo = (60 * 10) # Intervalo de quantos em quantos quadros a pontuacao vai aumentar (o pyxel roda em 60 FPS, entao 60 FPS equivalem a 1 segundo)
-
-
-        # Objetos no mapa
-        # TODO: Implementar melhor os objetos no mapa
-        # Retangulo
-        self.ret_x = 30
-        self.ret_y = 30
-
-        # Configuracoes iniciais
-        pyxel.init(self.largura_tela, self.altura_tela, title="River Raid 3", fps=60, quit_key=pyxel.KEY_ESCAPE)
-        pyxel.run(self.update, self.draw)
-
-    # Metodo para colocar os status do jogo
-    # que vai ser chamada automaticamente pelo Pyxel de "tempo em tempo por segundo"
+        # Inicializa o estado inicial como sendo o menu principal
+        self.current_state = MenuState(self) # Chama o menu principal passando a instancia do jogo e recebe o estado atual (que eh o proprio menu principal)
+        self.previous_state = None  # Usado para tela de pause do jogo (se o usuario pausar, o jogo guarda o estado atual do jogo)
+        self.network = NetworkManager(NETWORK_PORT) # Inicializa a conexao passando a porta que a aplicacao vai usar
+        
+        # Inicializa configuracoes iniciais do jogo
+        pyxel.init(SCREEN_WIDTH, SCREEN_HEIGHT, 
+                  title="River Raid 3", 
+                  fps=FPS,
+                  quit_key=pyxel.KEY_NONE) # O proprio codigo pede para o pyxel fechar (para o usuario nao fechar acidentalmente)
+        pyxel.fullscreen(self.is_fullscreen)
+        pyxel.run(self.update, self.draw) # Inicializa o jogo
+        pyxel.text(10, 10, str(id(self.game)), 7)  # Mostra ID da instância
+    
+    # Troca o estado atual do jogo (menus, jogo em si)
+    def change_state(self, new_state):
+        # Estado atual do jogo recebe o novo estado (seja menu, ou o jogo mesmo)
+        self.current_state = new_state
+    
+    # Atualiza a logica do jogo a cada frame
     def update(self):
-        # Exemplo de movimentacao de um objeto na tela
-        self.ret_x += 0.01 # Move o retangulo para a direita de x em x tempo
+        # Verifica tecla F11 para alternar tela cheia
+        if pyxel.btnp(pyxel.KEY_F11):
+            self.is_fullscreen = not self.is_fullscreen # Pega o contrario do estado atual
+            pyxel.fullscreen(self.is_fullscreen) # Fica ou nao em tela cheia
 
-        # Movimentacao:
-        if pyxel.btn(pyxel.KEY_D): # Direita
-            self._player_x += 1
-
-        if pyxel.btn(pyxel.KEY_A): # Esquerda
-            self._player_x -= 1
-        
-        if pyxel.btn(pyxel.KEY_S): # Baixo
-            self._player_y += 1
-        
-        if pyxel.btn(pyxel.KEY_W): # Cima
-            self._player_y -= 1
-        
-        ## Trava o player dentro da tela
-        # TODO: Trocar "10" pela altura e largura do player
-        # Player nao sai da tela no eixo X
-        # - min(self._player_x, self.largura_tela - 10): impede que o jogador va alem do lado direito da tela
-        # - max(0, ...): impede que o jogador va alem do lado esquerdo da tela
-        # - "10" eh a largura do jogador (mudar depois)
-        self._player_x = max(0, min(self._player_x, self.largura_tela - 10))
-
-        # Player nao sai da tela no eixo Y
-        # - min(self._player_y, self.altura_tela - 10): impede que o jogador va alem da parte inferior da tela
-        # - max(0, ...): impede que o jogador va alem da parte superior da tela
-        # - "10" eh a altura do jogador (mudar depois)
-        self._player_y = max(0, min(self._player_y, self.altura_tela  - 10))
-
-
-        # TODO: Implementar a pontuacao para o jogador (com base na referencia "River Raid")
-        # Alguma coisa acontece e a pontuacao aumenta
-        # Atualiza a pontuacao de acordo com o intervalo de tempo pre-definido
-        if pyxel.frame_count - self.tempo_atualizacao >= self.intervalo:
-            self.__pontuacao += 1
-            self.tempo_atualizacao = pyxel.frame_count  # Reseta o tempo de atualizacao
-
-    # Metodo para desenhar algo na tela
-    # Esse Metodo eh chamada por um certo numero de vezes por segundo
+        # Chama o metodo "update" da classe "MenuState" (states.py) para verificar qual o estado atual
+        self.current_state.update()
+    
+    # Desenha todos os elementos na tela a cada frame
     def draw(self):
-        pyxel.cls(5) # Limpa a tela e recria os objetos toda vez que eh chamado (para nao pintar a tela)
-        pyxel.rect(self.ret_x, self.ret_y, 20, 20, pyxel.COLOR_RED) # Desenha um retangulo na tela (posicao 10x10. altura:20, largura:20, cor:vermelha)
-        pyxel.circ(30, 30, 10, pyxel.COLOR_GREEN) # Desenha um circulo na tela  (posicao 30x30, raio:10, cor:Verde)
-        pyxel.rect(self._player_x, self._player_y, 10, 10, pyxel.COLOR_ORANGE) # Player (teste)
-        pyxel.text(5, 5, f"Pontuacao: {self.__pontuacao}", pyxel.COLOR_WHITE) # Pontuacao (teste)
-
-        # Carrega imagem do pyxel edit
-        # blt(player_x_circ, player_y_circ, 0, 0, 0, 16, 16, 0)
-
+        # Chama o metodo "draw" da classe "MenuState" (states.py) para atualizar o que vai ser desenhado na tela
+        self.current_state.draw()
+        
 
 
 # Executa o jogo
