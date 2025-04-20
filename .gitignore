@@ -1,5 +1,0 @@
-# Bytecode do Python
-# Ignora a pasta de bytecode do Python
-__pycache__/
-# Ignora arquivos .pyc, .pyo, .pyd (bytecode)
-*.py[cod]
