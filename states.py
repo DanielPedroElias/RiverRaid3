@@ -1,11 +1,11 @@
-### Maquina de estados do jogo. Contem:
+### Modulo de estados do jogo. Contem:
 ### - Telas de menu e submenus
-### - Estados de jogo singleplayer/multiplayer
+### - Estados de jogo para singleplayer/multiplayer
 ### - Transicoes entre telas
 
 # Bibliotecas
-import pyxel
-from config import *
+import pyxel            # Engine do jogo
+from config import *    # Importa constantes e configuracoes do arquivo "config.py"
 
 # Classe para o Menu Principal do jogo
 class MenuState:
@@ -124,71 +124,14 @@ class MultiplayerMenuState:
         # Escreve na tela "Pressione ESC para voltar"
         pyxel.text(20, 100, "Pressione ESC para voltar", COLOR_TEXT)
 
-# Classe para o menu de pause do jogo
-class PauseMenuState:
-    # Construtor
-    # Prepara o menu de pause
-    def __init__(self, game): # "game" eh passado no construtor da classe "Game" do "main.py", sendo a instancia do jogo
-        self.game = game # Recebe a instancia do jogo
-        self.selected = 0 # Recebe a posicao que o jogador vai selecionar ("Continuar", "Menu Principal"). Comeca com "Continuar"
-        self.options = ["Continuar", "Menu Principal"] # Opcoes do menu de pause
-    
-    # Gerencia escolha entre continuar o jogo ou voltar para o menu principal
-    def update(self):
-        # Pula para a proxima opcao do menu de multiplayer
-        if pyxel.btnp(pyxel.KEY_DOWN) or pyxel.btnp(pyxel.KEY_S) :
-            # Se estava na opcao 0: 0 + 1 = 1 -> 1 % 2 = 1 (segunda opcao)
-            # Se estava na opcao 1: 1 + 1 = 2 -> 2 % 2 = 0 (volta para a primeira opcao)
-            self.selected = (self.selected + 1) % 2 
-        elif pyxel.btnp(pyxel.KEY_UP) or pyxel.btnp(pyxel.KEY_W):
-            # Se estava na opcao 0: 0 - 1 = -1 -> -1 % 2 = 1 (segunda opcao) -> Resto de divisao negativa em python sempre retorna valor positivo
-            # Se estava na opcao 1: 1 - 1 = 0 -> 0 % 2 = 0 (primeira opcao)
-            self.selected = (self.selected - 1) % 2
-            
-        # Se o usuario apertar "Enter" no menu de pause:
-        if pyxel.btnp(pyxel.KEY_RETURN):
-            # Se tiver na primeira opcao "Continuar"
-            if self.selected == 0:
-                self.game.change_state(self.game.previous_state) # Continua o jogo
-            
-            # Se tiver na segunda opcao "Menu Principal"
-            else:
-                self.game.change_state(MenuState(self.game)) # Volta para o menu principal
-        
-        # Se o usuario apertar "Esc" no menu de pause:
-        if pyxel.btnp(pyxel.KEY_ESCAPE):
-            self.game.change_state(self.game.previous_state) # Continua o jogo
-    
-    # Mostra opcoes do menu de pause na tela
-    def draw(self):
-        # Limpa a tela
-        pyxel.cls(COLOR_BG)
-
-        # Escreve "Jogo Pausado" na tela
-        pyxel.text(50, 40, "Jogo Pausado", COLOR_TEXT)
-
-        # Marca a opcao em que o jogador esta selecionando no menu
-        for i, opt in enumerate(self.options): # faz um looping pelas opcoes
-            # "color" recebe:
-            #   - Se "i" nao for a opcao selecionada, coloca a cor normal de texto.
-            #   - Se "i" for a opcao selecionada, coloca uma cor de destaque nele
-            color = COLOR_TEXT if i != self.selected else COLOR_TEXT_HIGHLIGHT
-
-            # Pinta as opcoes do menu com as suas respectivas cores
-            # "i * 20" calcula a posicao em Y de cada opcao.
-            #   - 1 opcao: (i = 0): 60 + (0*20) = 60
-            #   - 2 opcao: (i = 1): 60 + (1*20) = 80
-            # "opt" recebe o texto de cada opcao
-            pyxel.text(50, 60 + (i*20), opt, color)
-
-# TODO: Implementar essa classe apos se certificar que "network.py" esta totalmente implementado
+# Classe que tem o menu de Conexao com algum Host
 class ConnectState:
     # Construtor
-    # Tela para inserir IP/porta do servidor
     def __init__(self, game): # "game" eh passado no construtor da classe "Game" do "main.py", sendo a instancia do jogo
         self.game = game # Recebe a instancia do jogo
         self.ip_input = "" # Ip digitado pelo usuario
         self.port_input = "" # Porta digitado pelo usuario
+        self.waiting_for_connection = False  # Declara se o usuario apertou "Enter" e o jogo estah esperando conectar com o host
         self.current_input = "ip"  # Campo atual que o usuario estah selecionando (IP ou Porta)
         self.message = "" # Mensagem de sucesso/erro de conexao 
         self.message_timer = 0 # Quanto tempo (frames) a mensagem de sucesso/erro de conexao ficara sendo exibida
@@ -215,21 +158,35 @@ class ConnectState:
             elif self.current_input == "port" and self.port_input:
                 self.port_input = self.port_input[:-1] # Remove o ultimo caractere da porta
         
-        # Se o usuario apertar "Enter", tenta conexao
-        if pyxel.btnp(pyxel.KEY_RETURN):
-            # Se conectar, coloca uma mensagem de sucesso, atualiza o timer da mensagem e entra no jogo
+        # Se o usuario apertou "Enter" e nao estah esperando alguma outra conexao ser confirmada, tenta conectar
+        if pyxel.btnp(pyxel.KEY_RETURN) and not self.waiting_for_connection:
+            # Se o usuario digitou o IP e a Porta no formato correto
             if self.validate_inputs():
-                # TODO: Fazer a conexao em rede antes de chamar o jogo
-                # TODO: Atualizar a logica de atualizacao da mensagem de conexao sucedida (nao estah mostrando na tela)
-                self.message = "Conectado com Sucesso"
-                self.message_timer = MESSAGE_DISPLAY_TIME # Exibe mensagem por X frames (olhar em config.py)
-                self.game.change_state(GameState(self.game, is_multiplayer=True)) # Entra no jogo
-            
-            # Se a conexao falhar, coloca uma mensagem de erro e atualiza o timer da mensagem
-            else:
-                self.message = "Dados de Conexao Invalidos"
-                self.message_timer = MESSAGE_DISPLAY_TIME # Exibe mensagem por X frames (olhar em config.py)
-        
+                # Tenta conectar com o Host
+                ok = self.game.network.connect(self.ip_input, self.port_input)
+                
+                # Se a conexao for estabelecida, imprime uma mensagem para o usuario
+                if ok:
+                    self.waiting_for_connection = True # Marca como esperando conexao
+                    self.message = "Conectando..." # Mensagem para o usuario
+                
+                # Se a tentavida de conexao falhou, escreve uma mensagem para o usuario
+                else:
+                    self.message = "Falha na conexão" # Mensagem para o usuario
+                
+                # Independente, se falou ou deu certo a conaxao, define um tempo para o texto para o usuario aparecer na tela
+                self.message_timer = MESSAGE_DISPLAY_TIME
+
+        # Se a conexao foi perdida durante a espera, permite nova tentativa
+        if self.message_timer == 0 and self.waiting_for_connection and not self.game.network.connected:
+            self.waiting_for_connection = False # Reseta a variavel de o usuario estar esperando uma conexao
+            self.message = "Conexao perdida. Tente novamente." # Mensagem para o usuario
+            self.message_timer = MESSAGE_DISPLAY_TIME / 2 # Tempo em que a mensagem vai ficar na tela
+
+        # Quando a primeixa conexao for confirmada (uma especie de 'ACK'), entra no jogo
+        if self.waiting_for_connection and self.game.network.connected:
+            self.game.change_state(WaitingForHostState(self.game))  # Entra para um submenu que espera o Host iniciar o jogo
+
         # Captura a entrada de texto digitado pelo usuario
         self.handle_text_input()
 
@@ -246,7 +203,6 @@ class ConnectState:
         # Verifica formato basico de IP
         parts = self.ip_input.split('.') # Divide o ip em uma lista de strings, separando por ponto
         # Se a lista das partes nao tiver tamanho 4 (logo nao tem 4 pontos, que eh o formato esperado de um IP)
-        print(parts)
         if len(parts) != 4:
             return False # Erro
         # Se o IP o tamanho correto
@@ -261,7 +217,7 @@ class ConnectState:
         return True # Sucesso (todas as verificacoes foram sucedidas)
 
     # Captura a entrada de texto
-    def handle_text_input(self):        
+    def handle_text_input(self):
         # "key" recebe os valores das teclas numericas (0 ateh 9)
         for key in range(pyxel.KEY_0, pyxel.KEY_9 + 1):
             # Se alguma tecla numerica for pressionada, atualiza o campo correspondente
@@ -271,6 +227,21 @@ class ConnectState:
                 char = str(key - pyxel.KEY_0) # Pega o valor digitado e converte para caractere
                 self.update_field(char) # Atualiza no campo correspondete
         
+        # "key" recebe os valores das teclas numericas (0 ateh 9) do teclado numerico
+        for key in range(pyxel.KEY_KP_1, pyxel.KEY_KP_0 + 1):
+            # Se alguma tecla numerica (teclado numerico) for pressionada, atualiza o campo correspondente
+            if pyxel.btnp(key):
+                # TODO: Tentar melhorar essa logica de mapeamento do teclado numerico
+                # Pega o valor numerico digitado e subtrai com o valor um (em relacao a como sao definidos pelo Pyxel) 
+                # para receber o valor real que foi digitado (de 0 ateh 9)
+                char = str(key - pyxel.KEY_KP_1 + 1) # Pega o valor digitado e converte para caractere
+                
+                # Se o usuario digitou "0", pega o valor correspondente e converte para caractere
+                if key == pyxel.KEY_KP_0:
+                    char = str(pyxel.KEY_KP_0 - pyxel.KEY_KP_0)
+
+                self.update_field(char) # Atualiza no campo correspondete
+
         # Especifico para o IP:
         # Se o usuario digitar ponto '.' e o campo selecionado for o IP
         if pyxel.btnp(pyxel.KEY_PERIOD) and self.current_input == "ip":
@@ -280,8 +251,8 @@ class ConnectState:
     def update_field(self, char):
         # Se o campo atual for IP
         if self.current_input == "ip":
-            # Se o tamanho do campo for menor do que 16 (Tamanho maximo de caracteres de um IPv4)
-            if len(self.ip_input) < 15: # "15" por causa que o vetor comeca a partir de "0"
+            # Se o tamanho do campo for menor do que 15 (Tamanho maximo de caracteres de um IPv4)
+            if len(self.ip_input) < MAX_IP_LENGTH: 
                 self.ip_input += char # Atualiza o campo do IP com o caractere digitado
         
         # Se o campo atual for a Porta
@@ -323,36 +294,89 @@ class ConnectState:
         pyxel.text(10, 100, "ENTER: Connectar", COLOR_TEXT)
         pyxel.text(10, 110, "ESC: Voltar", COLOR_TEXT)
 
+# Classe que tem o submenu em que o cliente aguarda o host iniciar o jogo
+class WaitingForHostState:
+    # Construtor
+    def __init__(self, game):# "game" eh passado no construtor da classe "Game" do "main.py", sendo a instancia do jogo
+        self.game = game # Recebe a instancia do jogo
+        self.message = "Aguardando host iniciar o jogo..." # Mensagem que vai ser escrita nesse menu
+        self.waiting = True # Marca se o Host iniciou ou nao a partida
 
-# TODO: Implementar essa classe apos se certificar que "network.py" esta totalmente implementado
+    # Verifica se o Host iniciou ou nao a partida
+    def update(self):
+        # Verifica se o host enviou sinal para iniciar o jogo
+        d = self.game.network.data # Dado enviado pelo host
+        # 1 - Se vier um pacote de "game_data" (payload como lista), o host ja comecou o jogo antes do cliente entrar
+        if isinstance(d, list):
+            self.game.change_state(GameState(self.game, is_multiplayer=True)) # Entra diretamente no jogo
+            return
+
+        # 2 - Se o host nao iniciou ainda, espera ele iniciar o jogo
+        if isinstance(d, dict) and d.get('type') == 'game_start':
+            self.game.change_state(GameState(self.game, is_multiplayer=True))
+            return
+
+        # Mantem a conexao ativa (envia heartbeat) para nao dar timeout
+        if self.game.network.connected:
+            self.game.network.send({'type': 'heartbeat'})
+
+        # Volta ao menu principal se o usuario apertar "Esc"
+        if pyxel.btnp(pyxel.KEY_ESCAPE):
+            self.game.network.stop() # Fecha a conexao 
+            self.game.change_state(MenuState(self.game)) # Volta para o menu principal
+
+    # Desenha informacoes para o usario na tela
+    def draw(self):
+        # Limpa a tela
+        pyxel.cls(COLOR_BG)
+        
+        # Escreve mensagens para o usuario para informar ele que o Host ainda nao iniciou o jogo
+        pyxel.text(20, 50, self.message, COLOR_TEXT)
+        pyxel.text(20, 70, "Pressione ESC para cancelar", COLOR_TEXT)
+
+# Classe que contem o submenu para 'Hostear' um jogo
 class HostGameState:
     # Construtor
     # Configura estado de hospedagem do jogo
     def __init__(self, game): # "game" eh passado no construtor da classe "Game" do "main.py", sendo a instancia do jogo
         self.game = game # Recebe a instancia do jogo
-        # TODO: Modificar isso aqui depois
         self.message = "" # Mensagem de sucesso/erro de conexao 
         self.message_timer = 0 # Quanto tempo (frames) a mensagem de sucesso/erro de conexao ficara sendo exibida
-        # TODO: Implementar depois no network.py
-        self.ip = "IP Generico"
-        self.port = NETWORK_PORT # Porta padrao
+        
+        # Inicia host automaticamente
+        if self.game.network.start_host():
+            self.ip   = self.game.network.local_ip  # Pega o IP local
+            self.port = self.game.network.port      # Pega a Porta 
+        # Caso de algum erro ao inciar o host
+        else:
+            self.ip = "—"
+            self.port = "—"
+            self.message = "Erro ao iniciar host"
+            self.message_timer = MESSAGE_DISPLAY_TIME
     
 
+        
     # Controla inicio do jogo e saida do menu
     def update(self):
+        # mantem cliente vivo (envia heartbeat) para evitar timeout
+        if self.game.network.connected:
+            self.game.network.send({'type': 'heartbeat'})
+
         # Se o usuario apertar "Enter", vai para o jogo normal e ativa o multiplayer (de forma assincrona)
         if pyxel.btnp(pyxel.KEY_RETURN):
+            self.game.network.send({'type': 'game_start'})
             self.game.change_state(GameState(self.game, is_multiplayer=True))
         
         # Se o usuario apertar "Esc", volta para a tela de menu do multiplayer
         if pyxel.btnp(pyxel.KEY_ESCAPE):
+            self.game.network.stop()  # Fecha a conexao
             self.game.change_state(MultiplayerMenuState(self.game))
 
         # Atualiza timer da mensagem a cada frame ateh chegar em zero (nao vai mostrar mais)
         if self.message_timer > 0:
             self.message_timer -= 1
     
-    # Mostra informacoes de conexao para outros jogadores
+    # Mostra informacoes do IP e Porta para outros jogadores poderem se conectar
     def draw(self):
         # Limpa a tela
         pyxel.cls(COLOR_BG)
@@ -361,60 +385,172 @@ class HostGameState:
         pyxel.text(20, 40, f"IP: {self.ip}", COLOR_TEXT)
         pyxel.text(20, 60, f"Port: {self.port}", COLOR_TEXT)
 
+
+        # Mostra status da conexao
+        if self.game.network.connected:
+            pyxel.text(20, 80, "Cliente conectado", COLOR_SUCCESS)
+        # Se nao tiver nenhum cliente conectado
+        else:
+            pyxel.text(20, 80, "Aguardando cliente...", COLOR_TEXT)
+
         # Mensagens de navegacao entre menus/jogo
         pyxel.text(10, 90, "Pressione ENTER para comecar o jogo", COLOR_TEXT_HIGHLIGHT)
         pyxel.text(10, 100, "Pressione ESC para voltar", COLOR_TEXT)
 
+# Classe para o menu de pause do jogo
+class PauseMenuState:
+    # Construtor
+    # Prepara o menu de pause
+    def __init__(self, game): # "game" eh passado no construtor da classe "Game" do "main.py", sendo a instancia do jogo
+        self.game = game # Recebe a instancia do jogo
+        self.selected = 0 # Recebe a posicao que o jogador vai selecionar ("Continuar", "Menu Principal"). Comeca com "Continuar"
+        self.options = ["Continuar", "Menu Principal"] # Opcoes do menu de pause
+    
+    # Gerencia escolha entre continuar o jogo ou voltar para o menu principal
+    def update(self):
+        # Mantem a rede ativa durante o pause (jogo continua funcionando) se estiver no modo online
+        if isinstance(self.game.previous_state, GameState) and self.game.previous_state.is_multiplayer:
+            self.game.previous_state.send_data()  # Continua enviando dados
+            self.game.previous_state.receive_data()  # Continua recebendo dados
 
-# TODO: Apos se certificar que "network.py" esta totalmente implementado, ajustar a parte do funcionamento do multiplayer
+
+        # Navega entre as opcoes do menu de pause
+        if pyxel.btnp(pyxel.KEY_DOWN) or pyxel.btnp(pyxel.KEY_S) :
+            # Se estava na opcao 0: 0 + 1 = 1 -> 1 % 2 = 1 (segunda opcao)
+            # Se estava na opcao 1: 1 + 1 = 2 -> 2 % 2 = 0 (volta para a primeira opcao)
+            self.selected = (self.selected + 1) % 2 
+        elif pyxel.btnp(pyxel.KEY_UP) or pyxel.btnp(pyxel.KEY_W):
+            # Se estava na opcao 0: 0 - 1 = -1 -> -1 % 2 = 1 (segunda opcao) -> Resto de divisao negativa em python sempre retorna valor positivo
+            # Se estava na opcao 1: 1 - 1 = 0 -> 0 % 2 = 0 (primeira opcao)
+            self.selected = (self.selected - 1) % 2
+            
+        # Se o usuario apertar "Enter" no menu de pause:
+        if pyxel.btnp(pyxel.KEY_RETURN):
+            # Se tiver na primeira opcao "Continuar"
+            if self.selected == 0:
+                self.game.change_state(self.game.previous_state) # Continua o jogo
+            
+            # Se tiver na segunda opcao "Menu Principal"
+            else:
+                # Se o jogo estiver no modo Multiplayer, fecha a conexao
+                if isinstance(self.game.previous_state, GameState) and self.game.previous_state.is_multiplayer:
+                    self.game.network.stop() # Fecha a conexao
+                
+                self.game.change_state(MenuState(self.game)) # Volta para o menu principal
+        
+        # Se o usuario apertar "Esc" no menu de pause
+        if pyxel.btnp(pyxel.KEY_ESCAPE):
+            self.game.change_state(self.game.previous_state) # Continua o jogo
+    
+    # Mostra opcoes do menu de pause na tela
+    def draw(self):
+        # Limpa a tela
+        pyxel.cls(COLOR_BG)
+
+        # Escreve "Jogo Pausado" na tela
+        pyxel.text(50, 40, "Jogo Pausado", COLOR_TEXT)
+
+        # Marca a opcao em que o jogador esta selecionando no menu
+        for i, opt in enumerate(self.options): # faz um looping pelas opcoes
+            # "color" recebe:
+            #   - Se "i" nao for a opcao selecionada, coloca a cor normal de texto.
+            #   - Se "i" for a opcao selecionada, coloca uma cor de destaque nele
+            color = COLOR_TEXT if i != self.selected else COLOR_TEXT_HIGHLIGHT
+
+            # Pinta as opcoes do menu com as suas respectivas cores
+            # "i * 20" calcula a posicao em Y de cada opcao.
+            #   - 1 opcao: (i = 0): 60 + (0*20) = 60
+            #   - 2 opcao: (i = 1): 60 + (1*20) = 80
+            # "opt" recebe o texto de cada opcao
+            pyxel.text(50, 60 + (i*20), opt, color)
+
+# Classe que gerencia o jogo principal (todos os estados, players, comunicacao via rede, etc.)
 class GameState:
     # Construtor
     # Estado principal onde o jogo acontece
     def __init__(self, game, is_multiplayer=False): # "game" eh passado no construtor da classe "Game" do "main.py", sendo a instancia do jogo
         self.game = game # Recebe a instancia do jogo
-        self.player_x = 50 # Recebe a posicao em X do jogador
-        self.player_y = 50 # Recebe a posicao em Y do jogador
-        self.is_multiplayer = is_multiplayer # Recebe se o jogo estah com multiplayer ativado ou nao
+        self.player_x = 50 # Posicao inicial em X do jogador
+        self.player_y = 50 # Posicao inicial em Y do jogador
+
+        self.is_multiplayer = is_multiplayer # Recebe se o jogo estah com multiplayer ativo ou nao
+        self.player2_x = 0 # Posicao inicial em X do segundo jogador
+        self.player2_y = 0 # Posicao inicial em Y do segundo jogador 
     
     # Gerencia a logica do jogo
     def update(self):
-       # Pausa o jogo com ESC
+        # Envia e recebe dados do jogo se estiver no modo Multiplayer
+        if self.is_multiplayer:
+            self.send_data()  # Envia dados
+            self.receive_data()  # Atualiza dados do segundo jogador
+
+        # Se o usuario apertar "Esc", pausa o jogo
         if pyxel.btnp(pyxel.KEY_ESCAPE):
-            self.game.previous_state = self  # Guarda estado atual
+            self.game.previous_state = self  # Guarda estado atual do jogo (passando a instancia)
             self.game.change_state(PauseMenuState(self.game)) # Troca o estado para o menu de pause
             return  # Sai da atualizacao
 
 
         # Atualiza logica do jogo (movimento, colisoes, rede)
         if pyxel.btn(pyxel.KEY_A):
-            self.player_x -= 1
+            self.player_x -= PLAYER_SPEED
         if pyxel.btn(pyxel.KEY_D):
-            self.player_x += 1
+            self.player_x += PLAYER_SPEED
         if pyxel.btn(pyxel.KEY_W):
-            self.player_y -= 1
+            self.player_y -= PLAYER_SPEED
         if pyxel.btn(pyxel.KEY_S):
-            self.player_y += 1
+            self.player_y += PLAYER_SPEED
 
         ## Trava o player dentro da tela
-        # TODO: Trocar "16" pela altura e largura do player quando tiver o modelo dos avioes
+        # TODO: Trocar 'PLAYER_WIDTH' e 'PLAYER_HEIGHT' pela altura e largura do player quando tiver uma pixel art dos avioes
         # Player nao sai da tela no eixo X
-        # - min(self._player_x, self.largura_tela - 16): impede que o jogador va alem do lado direito da tela
+        # - min(self._player_x, self.largura_tela - PLAYER_WIDTH): impede que o jogador va alem do lado direito da tela
         # - max(0, ...): impede que o jogador va alem do lado esquerdo da tela
-        # - "16" eh a largura do jogador (mudar depois)
-        self.player_x = max(0, min(self.player_x, SCREEN_WIDTH - 16))
+        # - PLAYER_WIDTH eh a largura do jogador (mudar depois)
+        self.player_x = max(0, min(self.player_x, SCREEN_WIDTH - PLAYER_WIDTH))
 
         # Player nao sai da tela no eixo Y
-        # - min(self._player_y, self.altura_tela - 16): impede que o jogador va alem da parte inferior da tela
+        # - min(self._player_y, self.altura_tela - PLAYER_HEIGHT): impede que o jogador va alem da parte inferior da tela
         # - max(0, ...): impede que o jogador va alem da parte superior da tela
-        # - "16" eh a altura do jogador (mudar depois)
-        self.player_y = max(0, min(self.player_y, SCREEN_HEIGHT - 16))
+        # - PLAYER_HEIGHT eh a altura do jogador (mudar depois)
+        self.player_y = max(0, min(self.player_y, SCREEN_HEIGHT - PLAYER_HEIGHT))
     
-    # Renderiza mapa, jogador e elementos do game
+    # Envia dados do jogador para a rede
+    def send_data(self):
+        # Enviar dados se estiver em multiplayer e conectados (tanto host quanto cliente)
+        if self.is_multiplayer and self.game.network.connected:
+            self.game.network.send([self.player_x, self.player_y])
+
+    # Processa dados recebidos da rede
+    def receive_data(self):
+        # Apenas interpreta os dados se tiver no Multiplayer,
+        # vier uma lista/tupla de pelo menos 2 numeros (de tamanho maior ou igual a 2)
+        if self.is_multiplayer and isinstance(self.game.network.data, (list, tuple)) and len(self.game.network.data) >= 2:
+            try:
+                # Atualiza a posicao do segundo jogador
+                self.player2_x = self.game.network.data[0]
+                self.player2_y = self.game.network.data[1]
+            
+            # Se ocorrer um erro, imprime no terminal
+            except (IndexError, TypeError):
+                print("Dados recebidos inválidos")
+
+    # Renderiza mapa, jogador e elementos do jogo
     def draw(self):
         # Limpa a tela
         pyxel.cls(COLOR_BG)
 
-        # TODO: Mudar isso mais na frente para um modelo do jogador mesmo (um aviao)
+        # TODO: Mudar isso mais na frente para uma pixel art do jogador (um aviao)
         # Desenha o jogador
-        pyxel.rect(self.player_x, self.player_y, 16, 16, COLOR_PLAYER)
+        pyxel.rect(self.player_x, self.player_y, PLAYER_WIDTH, PLAYER_HEIGHT, COLOR_PLAYER)
+
+        # TODO: Ajustar ou remover essa parte quando o multiplayer estiver funcionando
+        # Texto de status (DEBUG)
+        # Desenha outro jogador (se estiver em multiplayer e houver dados)
+        if self.is_multiplayer:
+            if self.game.network.connected:
+                pyxel.text(10, 10, "Multiplayer - Conectado", COLOR_TEXT_HIGHLIGHT)
+                pyxel.rect(self.player2_x, self.player2_y, PLAYER_WIDTH, PLAYER_HEIGHT, COLOR_PLAYER2_GENERIC) # Cor diferente para diferenciar
         
+            else:
+                pyxel.text(10, 10, "Multiplayer - Desconectado", COLOR_TEXT_HIGHLIGHT)

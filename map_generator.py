@@ -3,7 +3,7 @@
 ### - Gerenciar scroll automatico
 ### - Manter consistencia entre jogadores
 
-# TODO: Implementar geracao procedural do mapa (se for possivel fazer isso)
+# TODO: Implementar geracao procedural do mapa (se for possivel fazer isso sem se complicar demais)
 class MapGenerator:
     # Construtor
     # Prepara geracao com ou sem seed especifica
@@ -17,3 +17,5 @@ class MapGenerator:
     # Atualiza scroll e gera novas partes do mapa
     def update(self):
         pass
+
+    # Criar mais metodos, se necessario...
