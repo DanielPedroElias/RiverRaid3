@@ -308,12 +308,12 @@ class WaitingForHostState:
         d = self.game.network.data # Dado enviado pelo host
         # 1 - Se vier um pacote de "game_data" (payload como lista), o host ja comecou o jogo antes do cliente entrar
         if isinstance(d, list):
-            self.game.change_state(GameState(self.game, is_multiplayer=True)) # Entra diretamente no jogo
+            self.game.change_state(GameState(self.game, is_multiplayer=True, is_host= True)) # Entra diretamente no jogo
             return
 
         # 2 - Se o host nao iniciou ainda, espera ele iniciar o jogo
         if isinstance(d, dict) and d.get('type') == 'game_start':
-            self.game.change_state(GameState(self.game, is_multiplayer=True))
+            self.game.change_state(GameState(self.game, is_multiplayer=True, is_host=False))
             return
 
         # Mantem a conexao ativa (envia heartbeat) para nao dar timeout
@@ -365,7 +365,7 @@ class HostGameState:
         # Se o usuario apertar "Enter", vai para o jogo normal e ativa o multiplayer (de forma assincrona)
         if pyxel.btnp(pyxel.KEY_RETURN):
             self.game.network.send({'type': 'game_start'})
-            self.game.change_state(GameState(self.game, is_multiplayer=True))
+            self.game.change_state(GameState(self.game, is_multiplayer=True, is_host=True)) # Entra no jogo (com multiplayer ativo)
         
         # Se o usuario apertar "Esc", volta para a tela de menu do multiplayer
         if pyxel.btnp(pyxel.KEY_ESCAPE):
@@ -468,17 +468,24 @@ class PauseMenuState:
 class GameState:
     # Construtor
     # Estado principal onde o jogo acontece
-    def __init__(self, game, is_multiplayer=False): # "game" eh passado no construtor da classe "Game" do "main.py", sendo a instancia do jogo
+    def __init__(self, game, is_multiplayer=False, is_host=False): # "game" eh passado no construtor da classe "Game" do "main.py", sendo a instancia do jogo
         self.game = game # Recebe a instancia do jogo
         self.player_x = 50 # Posicao inicial em X do jogador
         self.player_y = 50 # Posicao inicial em Y do jogador
 
         self.is_multiplayer = is_multiplayer # Recebe se o jogo estah com multiplayer ativo ou nao
+        self.is_host = is_host  # Novo parâmetro para identificar o host
         self.player2_x = 0 # Posicao inicial em X do segundo jogador
         self.player2_y = 0 # Posicao inicial em Y do segundo jogador 
+        
+        self.background = Background()  # <--- Nova linha
+
     
     # Gerencia a logica do jogo
     def update(self):
+        
+        self.background.update()  # <--- Nova linha
+
         # Envia e recebe dados do jogo se estiver no modo Multiplayer
         if self.is_multiplayer:
             self.send_data()  # Envia dados
@@ -501,20 +508,26 @@ class GameState:
         if pyxel.btn(pyxel.KEY_S):
             self.player_y += PLAYER_SPEED
 
-        ## Trava o player dentro da tela
-        # TODO: Trocar 'PLAYER_WIDTH' e 'PLAYER_HEIGHT' pela altura e largura do player quando tiver uma pixel art dos avioes
-        # Player nao sai da tela no eixo X
-        # - min(self._player_x, self.largura_tela - PLAYER_WIDTH): impede que o jogador va alem do lado direito da tela
-        # - max(0, ...): impede que o jogador va alem do lado esquerdo da tela
-        # - PLAYER_WIDTH eh a largura do jogador (mudar depois)
+        # Colisão com as bordas da tela (código existente)
         self.player_x = max(0, min(self.player_x, SCREEN_WIDTH - PLAYER_WIDTH))
-
-        # Player nao sai da tela no eixo Y
-        # - min(self._player_y, self.altura_tela - PLAYER_HEIGHT): impede que o jogador va alem da parte inferior da tela
-        # - max(0, ...): impede que o jogador va alem da parte superior da tela
-        # - PLAYER_HEIGHT eh a altura do jogador (mudar depois)
         self.player_y = max(0, min(self.player_y, SCREEN_HEIGHT - PLAYER_HEIGHT))
+
+        # Verifica colisão com o rio para ambos os jogadores
+        self.check_river_collision(self.player_x, self.player_y, "Jogador 1")
+        if self.is_multiplayer:
+            self.check_river_collision(self.player2_x, self.player2_y, "Jogador 2")
+
     
+    def check_river_collision(self, x, y, player_name):
+        """Verifica se o jogador está fora das margens do rio."""
+        # Obtém as margens na posição Y do jogador
+        margem_esq, margem_dir = self.background.obter_margens_rio(y)
+        
+        # Verifica se o jogador está fora do rio (considerando a largura do sprite)
+        if (x < margem_esq) or (x + PLAYER_WIDTH > margem_dir):
+            print(f"{player_name} colidiu com a margem do rio!")
+            print(f"Posição: ({x}, {y})")
+
     # Envia dados do jogador para a rede
     def send_data(self):
         # Enviar dados se estiver em multiplayer e conectados (tanto host quanto cliente)
@@ -539,18 +552,125 @@ class GameState:
     def draw(self):
         # Limpa a tela
         pyxel.cls(COLOR_BG)
+        self.background.draw()
+        
+        # Desenha o jogador local
+        if self.is_multiplayer:
+            if self.is_host:
+                # Host: avião (48,0)
+                pyxel.blt(self.player_x, self.player_y, 0, 48, 0, PLAYER_WIDTH, PLAYER_HEIGHT, colkey=0)
+            else:
+                # Cliente: helicóptero (0,16)
+                pyxel.blt(self.player_x, self.player_y, 0, 0, 16, PLAYER_WIDTH, PLAYER_HEIGHT, colkey=0)
+        else:
+            # Singleplayer: avião padrão
+            pyxel.blt(self.player_x, self.player_y, 0, 48, 0, PLAYER_WIDTH, PLAYER_HEIGHT, colkey=0)
 
-        # TODO: Mudar isso mais na frente para uma pixel art do jogador (um aviao)
-        # Desenha o jogador
-        pyxel.rect(self.player_x, self.player_y, PLAYER_WIDTH, PLAYER_HEIGHT, COLOR_PLAYER)
+        # Desenha o outro jogador (multiplayer)
+        if self.is_multiplayer and self.game.network.connected:
+            pyxel.text(10, 10, "Multiplayer - Conectado", COLOR_TEXT_HIGHLIGHT)
+            if self.is_host:
+                # Host vê cliente como helicóptero
+                pyxel.blt(self.player2_x, self.player2_y, 0, 0, 16, PLAYER_WIDTH, PLAYER_HEIGHT, colkey=0)
+            else:
+                # Cliente vê host como avião
+                pyxel.blt(self.player2_x, self.player2_y, 0, 48, 0, PLAYER_WIDTH, PLAYER_HEIGHT, colkey=0)
+        elif self.is_multiplayer:
+            pyxel.text(10, 10, "Multiplayer - Desconectado", COLOR_TEXT_HIGHLIGHT)
+        
 
-        # TODO: Ajustar ou remover essa parte quando o multiplayer estiver funcionando
-        # Texto de status (DEBUG)
-        # Desenha outro jogador (se estiver em multiplayer e houver dados)
+        # Desenha o outro jogador
         if self.is_multiplayer:
             if self.game.network.connected:
                 pyxel.text(10, 10, "Multiplayer - Conectado", COLOR_TEXT_HIGHLIGHT)
-                pyxel.rect(self.player2_x, self.player2_y, PLAYER_WIDTH, PLAYER_HEIGHT, COLOR_PLAYER2_GENERIC) # Cor diferente para diferenciar
-        
+                # Inverte a skin para o outro jogador
+                if self.is_host:
+                    # Host vê o cliente como helicóptero
+                    pyxel.blt(self.player2_x, self.player2_y, 0, 0, 16, PLAYER_WIDTH, PLAYER_HEIGHT, colkey=0)
+                else:
+                    # Cliente vê o host como avião
+                    pyxel.blt(self.player2_x, self.player2_y, 0, 48, 0, PLAYER_WIDTH, PLAYER_HEIGHT, colkey=0)
             else:
                 pyxel.text(10, 10, "Multiplayer - Desconectado", COLOR_TEXT_HIGHLIGHT)
+
+import random
+
+import pyxel
+import random
+
+class Background:
+    def __init__(self):
+        # Parâmetros de controle do movimento do rio
+        self.deslocamento = 0.0          # Deslocamento base para animação
+  
+        self.amplitude_onda = 30         # Altura máxima das ondulações laterais
+        self.frequencia_onda = 1      # Frequência das ondulações principais
+        self.largura_rio = 60            # Largura base do rio
+        self.cores_borda = [15, 1, 5]    # Cores das bordas do rio (degradê)
+
+        # Controle do scroll vertical
+        self.velocidade_scroll = 1     # Velocidade de descida do cenário
+
+        # Gera posições aleatórias para as árvores
+        self.arvores = []
+        for _ in range(30):
+            x = random.randint(0, pyxel.width)
+            y = random.randint(0, pyxel.height)
+            self.arvores.append([x, y])  # Armazena como lista mutável
+
+    def update(self):
+        # Atualiza o deslocamento para animação contínua
+        self.deslocamento -= self.velocidade_scroll
+
+        # Atualiza posição das árvores com scroll
+        for arvore in self.arvores:
+            arvore[1] += self.velocidade_scroll  # Move árvore para baixo
+
+            # Recicla árvores que saírem da tela
+            if arvore[1] > pyxel.height:
+                arvore[0] = random.randint(0, pyxel.width)  # Nova posição X
+                arvore[1] = 0                                # Reposiciona no topo
+
+    def obter_margens_rio(self, y):
+        # Cálculo complexo das margens com múltiplas ondas senoidais
+        centro_x = pyxel.width/2 + self.amplitude_onda * (
+            pyxel.sin(self.frequencia_onda * y + self.deslocamento) * 0.7 +  # Onda principal
+            pyxel.sin(0.3 * y + 1.5 * self.deslocamento) * 0.3 +            # Onda secundária
+            pyxel.sin(0.7 * y - 0.5 * self.deslocamento) * 0.4              # Terceira onda
+        )
+
+        # Largura dinâmica com variação senoidal randômica
+        largura_atual = self.largura_rio + 15 * (
+            pyxel.sin(y/50 + self.deslocamento) * 0.6 +
+            pyxel.sin(y/27 - 2 * self.deslocamento) * 0.4
+        )
+
+        return (
+            centro_x - largura_atual/2,  # Margem esquerda
+            centro_x + largura_atual/2   # Margem direita
+        )
+
+    def draw(self):
+        # Fundo azul-céu
+        pyxel.rect(0, 0, pyxel.width, pyxel.height, 9)
+
+        # Desenha todas as árvores
+        for x, y in self.arvores:
+            margem_esquerda, margem_direita = self.obter_margens_rio(y)
+
+            # Desenha árvore apenas se estiver fora do rio + margem de segurança
+            if x < margem_esquerda - 8 or x > margem_direita + 8:
+                pyxel.blt(x, y, 0, 32, 0, 16, 16, 0)
+
+        # Desenha o rio linha por linha
+        for y in range(pyxel.height):
+            esquerda, direita = self.obter_margens_rio(y)
+
+            # Desenha bordas com efeito de degradê
+            for i in range(4):
+                cor_borda = self.cores_borda[i % len(self.cores_borda)]
+                pyxel.line(esquerda - i, y, esquerda, y, cor_borda)    # Borda esquerda
+                pyxel.line(direita, y, direita + i, y, cor_borda)        # Borda direita
+
+            # Desenha a água principal do rio
+            pyxel.line(esquerda, y, direita, y, 12)
