@@ -497,7 +497,6 @@ class GameState:
             self.game.change_state(PauseMenuState(self.game)) # Troca o estado para o menu de pause
             return  # Sai da atualizacao
 
-
         # Atualiza logica do jogo (movimento, colisoes, rede)
         if pyxel.btn(pyxel.KEY_A):
             self.player_x -= PLAYER_SPEED
@@ -512,11 +511,45 @@ class GameState:
         self.player_x = max(0, min(self.player_x, SCREEN_WIDTH - PLAYER_WIDTH))
         self.player_y = max(0, min(self.player_y, SCREEN_HEIGHT - PLAYER_HEIGHT))
 
-        # Verifica colisão com o rio para ambos os jogadores
-        self.check_river_collision(self.player_x, self.player_y, "Jogador 1")
-        if self.is_multiplayer:
-            self.check_river_collision(self.player2_x, self.player2_y, "Jogador 2")
+        # Verifica todas as colisões
+        self.check_all_collisions()
 
+    def check_all_collisions(self):
+        # Colisão com margens do rio
+        # self.check_river_collision(self.player_x, self.player_y, "Jogador 1")
+        # if self.is_multiplayer:
+        #     self.check_river_collision(self.player2_x, self.player2_y, "Jogador 2")
+
+        # Colisão com árvores para ambos os jogadores
+        self.check_tree_collision(self.player_x, self.player_y, "Jogador 1")
+        if self.is_multiplayer:
+            self.check_tree_collision(self.player2_x, self.player2_y, "Jogador 2")
+
+    def check_tree_collision(self, player_x, player_y, player_name):
+        # Hitbox do jogador com offset
+        jogador_left = player_x + 2
+        jogador_right = player_x + PLAYER_WIDTH - 2
+        jogador_top = player_y + 2
+        jogador_bottom = player_y + PLAYER_HEIGHT - 2
+
+        # Verifica colisão com cada árvore
+        for arvore in self.background.arvores:
+            # Pega a hitbox da árvore
+            arv_left, arv_top, arv_right, arv_bottom = arvore.hitbox
+
+            # Detecção de colisão AABB
+            if (jogador_right > arv_left and
+                jogador_left < arv_right and
+                jogador_bottom > arv_top and
+                jogador_top < arv_bottom):
+                
+                # Colisão detectada
+                print(f"{player_name} colidiu com uma árvore!")
+                print(f"Posição: ({player_x}, {player_y})")
+                return True  # Retorna True se houve colisão
+        
+        return False  # Sem colisão
+                
     
     def check_river_collision(self, x, y, player_name):
         """Verifica se o jogador está fora das margens do rio."""
@@ -593,43 +626,73 @@ class GameState:
             else:
                 pyxel.text(10, 10, "Multiplayer - Desconectado", COLOR_TEXT_HIGHLIGHT)
 
-import random
+        # Desenha hitbox das árvores (debug)
+        for arvore in self.background.arvores:
+            arv_left, arv_top, arv_right, arv_bottom = arvore.hitbox
+            pyxel.rectb(arv_left, arv_top, arv_right - arv_left, arv_bottom - arv_top, 8)
 
-import pyxel
-import random
+class Tree:
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+        self.width = 16  # Largura do sprite da árvore
+        self.height = 16  # Altura do sprite da árvore
 
+    @property
+    def hitbox(self):
+        # Retorna retângulo de colisão (esquerda, topo, direita, baixo)
+        return (
+            self.x + 2,  # Offset para hitbox mais precisa
+            self.y + 2,
+            self.x + self.width - 2,
+            self.y + self.height - 2
+        )
+
+import random
 class Background:
     def __init__(self):
         # Parâmetros de controle do movimento do rio
         self.deslocamento = 0.0          # Deslocamento base para animação
   
         self.amplitude_onda = 30         # Altura máxima das ondulações laterais
-        self.frequencia_onda = 1      # Frequência das ondulações principais
+        self.frequencia_onda = 0.01      # Frequência das ondulações principais
         self.largura_rio = 60            # Largura base do rio
         self.cores_borda = [15, 1, 5]    # Cores das bordas do rio (degradê)
 
         # Controle do scroll vertical
         self.velocidade_scroll = 1     # Velocidade de descida do cenário
 
-        # Gera posições aleatórias para as árvores
+        # Gera árvores fora do rio
         self.arvores = []
         for _ in range(30):
-            x = random.randint(0, pyxel.width)
             y = random.randint(0, pyxel.height)
-            self.arvores.append([x, y])  # Armazena como lista mutável
-
+            margem_esq, margem_dir = self.obter_margens_rio(y)
+            # Escolhe lado esquerdo ou direito aleatoriamente
+            if random.choice([True, False]):
+                # Esquerda: entre 0 e margem_esq - 8 (folga)
+                x = random.randint(0, max(0, int(margem_esq - 8)))
+            else:
+                # Direita: entre margem_dir + 8 e largura da tela
+                x = random.randint(min(int(margem_dir + 8), pyxel.width - 16), pyxel.width - 16)
+            self.arvores.append(Tree(x, y))
+            
     def update(self):
         # Atualiza o deslocamento para animação contínua
         self.deslocamento -= self.velocidade_scroll
 
-        # Atualiza posição das árvores com scroll
+        # Recicla árvores que saírem da tela
         for arvore in self.arvores:
-            arvore[1] += self.velocidade_scroll  # Move árvore para baixo
-
-            # Recicla árvores que saírem da tela
-            if arvore[1] > pyxel.height:
-                arvore[0] = random.randint(0, pyxel.width)  # Nova posição X
-                arvore[1] = 0                                # Reposiciona no topo
+            arvore.y += self.velocidade_scroll
+            if arvore.y > pyxel.height:
+                # Reposiciona no topo, fora do rio
+                margem_esq, margem_dir = self.obter_margens_rio(0)  # Margens no topo (y=0)
+                if random.choice([True, False]):
+                    # Esquerda
+                    arvore.x = random.randint(0, max(0, int(margem_esq - 8)))
+                else:
+                    # Direita
+                    arvore.x = random.randint(min(int(margem_dir + 8), pyxel.width - 16), pyxel.width - 16)
+                arvore.y = 0
 
     def obter_margens_rio(self, y):
         # Cálculo complexo das margens com múltiplas ondas senoidais
@@ -651,16 +714,14 @@ class Background:
         )
 
     def draw(self):
-        # Fundo azul-céu
+        # Fundo 
         pyxel.rect(0, 0, pyxel.width, pyxel.height, 9)
 
-        # Desenha todas as árvores
-        for x, y in self.arvores:
-            margem_esquerda, margem_direita = self.obter_margens_rio(y)
-
-            # Desenha árvore apenas se estiver fora do rio + margem de segurança
-            if x < margem_esquerda - 8 or x > margem_direita + 8:
-                pyxel.blt(x, y, 0, 32, 0, 16, 16, 0)
+        # Desenha árvores (usando as coordenadas do objeto Tree)
+        for arvore in self.arvores:
+            margem_esquerda, margem_direita = self.obter_margens_rio(arvore.y)
+            if arvore.x < margem_esquerda - 8 or arvore.x > margem_direita + 8:
+                pyxel.blt(arvore.x, arvore.y, 0, 32, 0, 16, 16, 0)
 
         # Desenha o rio linha por linha
         for y in range(pyxel.height):
