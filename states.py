@@ -124,8 +124,8 @@ class MultiplayerMenuState:
         # Escreve na tela "Pressione ESC para voltar"
         pyxel.text(20, 100, "Pressione ESC para voltar", COLOR_TEXT)
 
-# Classe que tem o menu de Conexao com algum Host
-class ConnectState:
+# Classe que tem o menu de Conexao com algum Host SCREEN_HEIGHT
+class ConnectState: 
     # Construtor
     def __init__(self, game): # "game" eh passado no construtor da classe "Game" do "main.py", sendo a instancia do jogo
         self.game = game # Recebe a instancia do jogo
@@ -478,13 +478,13 @@ class GameState:
         self.player2_x = 0 # Posicao inicial em X do segundo jogador
         self.player2_y = 0 # Posicao inicial em Y do segundo jogador 
         
-        self.background = Background()  # <--- Nova linha
+        self.background = Background()  
 
     
     # Gerencia a logica do jogo
     def update(self):
         
-        self.background.update()  # <--- Nova linha
+        self.background.update()  
 
         # Envia e recebe dados do jogo se estiver no modo Multiplayer
         if self.is_multiplayer:
@@ -507,7 +507,7 @@ class GameState:
         if pyxel.btn(pyxel.KEY_S):
             self.player_y += PLAYER_SPEED
 
-        # Colisão com as bordas da tela (código existente)
+        # Colisão com as bordas da tela 
         self.player_x = max(0, min(self.player_x, SCREEN_WIDTH - PLAYER_WIDTH))
         self.player_y = max(0, min(self.player_y, SCREEN_HEIGHT - PLAYER_HEIGHT))
 
@@ -532,6 +532,9 @@ class GameState:
         jogador_top = player_y + 2
         jogador_bottom = player_y + PLAYER_HEIGHT - 2
 
+        # Lista temporária para armazenar árvores colididas
+        arvores_para_remover = []
+
         # Verifica colisão com cada árvore
         for arvore in self.background.arvores:
             # Pega a hitbox da árvore
@@ -543,12 +546,16 @@ class GameState:
                 jogador_bottom > arv_top and
                 jogador_top < arv_bottom):
                 
-                # Colisão detectada
+                # Marca árvore para remoção
+                arvores_para_remover.append(arvore)
                 print(f"{player_name} colidiu com uma árvore!")
-                print(f"Posição: ({player_x}, {player_y})")
-                return True  # Retorna True se houve colisão
+
+        # Remove as árvores colididas
+        for arvore in arvores_para_remover:
+            if arvore in self.background.arvores:
+                self.background.arvores.remove(arvore)
         
-        return False  # Sem colisão
+        return len(arvores_para_remover) > 0
                 
     
     def check_river_collision(self, x, y, player_name):
@@ -592,6 +599,7 @@ class GameState:
             if self.is_host:
                 # Host: avião (48,0)
                 pyxel.blt(self.player_x, self.player_y, 0, 48, 0, PLAYER_WIDTH, PLAYER_HEIGHT, colkey=0)
+
             else:
                 # Cliente: helicóptero (0,16)
                 pyxel.blt(self.player_x, self.player_y, 0, 0, 16, PLAYER_WIDTH, PLAYER_HEIGHT, colkey=0)
@@ -611,6 +619,7 @@ class GameState:
         elif self.is_multiplayer:
             pyxel.text(10, 10, "Multiplayer - Desconectado", COLOR_TEXT_HIGHLIGHT)
         
+        print(f"Posição Jogador 1: ({self.player_x}, {self.player_y})") 
 
         # Desenha o outro jogador
         if self.is_multiplayer:
@@ -648,90 +657,195 @@ class Tree:
             self.y + self.height - 2
         )
 
-import random
+from collections import deque
+import pyxel, random
+
 class Background:
+    
     def __init__(self):
-        # Parâmetros de controle do movimento do rio
-        self.deslocamento = 0.0          # Deslocamento base para animação
-  
-        self.amplitude_onda = 30         # Altura máxima das ondulações laterais
-        self.frequencia_onda = 0.01      # Frequência das ondulações principais
-        self.largura_rio = 60            # Largura base do rio
-        self.cores_borda = [15, 1, 5]    # Cores das bordas do rio (degradê)
+        # scroll vertical do padrão do rio
+        self.velocidade_scroll = 1
+        self.deslocamento = 0
 
-        # Controle do scroll vertical
-        self.velocidade_scroll = 1     # Velocidade de descida do cenário
+        # largura e cor da borda
+        self.largura_rio = 45
+        self.cor_borda = 15
 
-        # Gera árvores fora do rio
-        self.arvores = []
-        for _ in range(30):
-            y = random.randint(0, pyxel.height)
-            margem_esq, margem_dir = self.obter_margens_rio(y)
-            # Escolhe lado esquerdo ou direito aleatoriamente
-            if random.choice([True, False]):
-                # Esquerda: entre 0 e margem_esq - 8 (folga)
-                x = random.randint(0, max(0, int(margem_esq - 8)))
+        # centro inicial (metade da tela)
+        self.centro_rio_x = pyxel.width / 2
+        self.target_centro_x = self.centro_rio_x
+
+        # quão rápido o rio “anima” para a target por frame
+        self.curve_speed = 1.0
+
+        # histórico de centros (novo em índice 0, velho é descartado)
+        self.centros_hist = deque([self.centro_rio_x] * pyxel.height,
+                                  maxlen=pyxel.height)
+
+        # padrão de pontos brancos
+        self.pontos_brancos = [
+            (3, 2), (10, 5), (15, 8), (25, 3), (30, 7),
+            (5, 14), (20, 12), (28, 16), (12, 20), (18, 18)
+        ]
+
+        # árvores 
+        self.distancia_rio = 2
+        self.margem_lateral = 2
+        self.max_arvores = 30
+        self.arvores = [self.criar_arvore_fora_tela() for _ in range(self.max_arvores)]
+
+    def criar_arvore_fora_tela(self):
+        """Só retorna Tree(x,y) com x *fora* das margens do rio."""
+        y = random.randint(-pyxel.height, 0)
+        tree_w = 16
+
+        # Como a árvore vai aparecer em screen_y == 0,
+        # já pegamos as margens dali:
+        esq0, dir0 = self.obter_margens_rio(0)
+
+        # Intervalos seguros:
+        left_min  = self.margem_lateral
+        left_max  = int(esq0 - self.distancia_rio - tree_w)
+        right_min = int(dir0 + self.distancia_rio)
+        right_max = pyxel.width - self.margem_lateral - tree_w
+
+        # Loop até achar x fora das margens
+        while True:
+            # escolhe aleatoriamente um dos lados válidos
+            if left_min <= left_max and random.random() < 0.5:
+                x = random.randint(left_min, left_max)
+            elif right_min <= right_max:
+                x = random.randint(right_min, right_max)
             else:
-                # Direita: entre margem_dir + 8 e largura da tela
-                x = random.randint(min(int(margem_dir + 8), pyxel.width - 16), pyxel.width - 16)
-            self.arvores.append(Tree(x, y))
-            
-    def update(self):
-        # Atualiza o deslocamento para animação contínua
-        self.deslocamento -= self.velocidade_scroll
+                x = self.margem_lateral
 
-        # Recicla árvores que saírem da tela
+            if not (esq0 < x < dir0):
+                break
+
+        return Tree(x, y)
+
+
+    def reposicionar_arvore(self, arvore):
+        """Reposiciona atribuindo arvore.x/y, mas só fora do rio."""
+        nova = self.criar_arvore_fora_tela()
+        arvore.x = nova.x
+        arvore.y = nova.y
+
+
+    def _novo_x_fora_do_rio(self, esq, dir, y):
+        """Gera um x que fique fora de (esq,dir), via loop garantido."""
+        tree_w = 16
+        left_min  = self.margem_lateral
+        left_max  = int(esq - self.distancia_rio - tree_w)
+        right_min = int(dir + self.distancia_rio)
+        right_max = pyxel.width - self.margem_lateral - tree_w
+
+        while True:
+            if left_min <= left_max and right_min <= right_max:
+                if random.random() < 0.5:
+                    x = random.randint(left_min, left_max)
+                else:
+                    x = random.randint(right_min, right_max)
+            elif left_min <= left_max:
+                x = random.randint(left_min, left_max)
+            elif right_min <= right_max:
+                x = random.randint(right_min, right_max)
+            else:
+                x = self.margem_lateral
+
+            # se x estiver fora do rio previsto, aceita
+            if not (esq < x < dir):
+                return x, y
+
+    def reposicionar_arvore(self, arvore):
+        """Reposiciona a árvore logo acima, sempre fora do rio."""
+        # Aproveita a mesma lógica de criar_arvore_fora_tela
+        nova = self.criar_arvore_fora_tela()
+        arvore.x, arvore.y = nova.x, nova.y
+
+    def obter_margens_rio(self, screen_y):
+        """
+        Retorna (margem_esq, margem_dir) para a linha screen_y,
+        exatamente como desenhado.
+        """
+        centro = self.centros_hist[screen_y]
+        meia = self.largura_rio / 2
+        return centro - meia, centro + meia
+
+    def update(self):
+        # ─── controle por tecla ───
+        if pyxel.btnp(pyxel.KEY_1):
+            # mover alvo 30px para a direita
+            self.target_centro_x = min(self.target_centro_x + 30,
+                                       pyxel.width - self.largura_rio/2)
+        if pyxel.btnp(pyxel.KEY_2):
+            # mover alvo 30px para a esquerda
+            self.target_centro_x = max(self.target_centro_x - 30,
+                                       self.largura_rio/2)
+
+        # ─── animação suave ───
+        diff = self.target_centro_x - self.centro_rio_x
+        if abs(diff) > self.curve_speed:
+            self.centro_rio_x += self.curve_speed * (1 if diff > 0 else -1)
+        else:
+            self.centro_rio_x = self.target_centro_x
+
+        # empurra pro topo do histórico
+        self.centros_hist.appendleft(self.centro_rio_x)
+
+        # scroll vertical do padrão do rio
+        self.deslocamento += self.velocidade_scroll
+
+        # Garante número máximo de árvores
+        while len(self.arvores) < self.max_arvores:
+            self.arvores.append(self.criar_arvore_fora_tela())
+
+        # Garante número máximo de árvores
+        while len(self.arvores) < self.max_arvores:
+            self.arvores.append(self.criar_arvore_fora_tela())
+
+        # Move e valida cada árvore
         for arvore in self.arvores:
             arvore.y += self.velocidade_scroll
+
+            # se saiu da tela embaixo, joga pra cima
             if arvore.y > pyxel.height:
-                # Reposiciona no topo, fora do rio
-                margem_esq, margem_dir = self.obter_margens_rio(0)  # Margens no topo (y=0)
-                if random.choice([True, False]):
-                    # Esquerda
-                    arvore.x = random.randint(0, max(0, int(margem_esq - 8)))
-                else:
-                    # Direita
-                    arvore.x = random.randint(min(int(margem_dir + 8), pyxel.width - 16), pyxel.width - 16)
-                arvore.y = 0
+                self.reposicionar_arvore(arvore)
 
-    def obter_margens_rio(self, y):
-        # Cálculo complexo das margens com múltiplas ondas senoidais
-        centro_x = pyxel.width/2 + self.amplitude_onda * (
-            pyxel.sin(self.frequencia_onda * y + self.deslocamento) * 0.7 +  # Onda principal
-            pyxel.sin(0.3 * y + 1.5 * self.deslocamento) * 0.3 +            # Onda secundária
-            pyxel.sin(0.7 * y - 0.5 * self.deslocamento) * 0.4              # Terceira onda
-        )
+            # AGORA garanta 0% de chance de ficar sobre o rio:
+            # verifica margens na altura atual
+            screen_y = min(max(int(arvore.y), 0), pyxel.height - 1)
+            esq, dir = self.obter_margens_rio(screen_y)
 
-        # Largura dinâmica com variação senoidal randômica
-        largura_atual = self.largura_rio + 15 * (
-            pyxel.sin(y/50 + self.deslocamento) * 0.6 +
-            pyxel.sin(y/27 - 2 * self.deslocamento) * 0.4
-        )
-
-        return (
-            centro_x - largura_atual/2,  # Margem esquerda
-            centro_x + largura_atual/2   # Margem direita
-        )
+            # enquanto estiver dentro do rio, reposiciona de novo
+            while esq < arvore.x < dir:
+                self.reposicionar_arvore(arvore)
+                # e recalc margens para a nova y
+                screen_y = min(max(int(arvore.y), 0), pyxel.height - 1)
+                esq, dir = self.obter_margens_rio(screen_y)
 
     def draw(self):
-        # Fundo 
-        pyxel.rect(0, 0, pyxel.width, pyxel.height, 9)
+        pyxel.rect(0, 0, pyxel.width, pyxel.height, 9)  # fundo
 
-        # Desenha árvores (usando as coordenadas do objeto Tree)
-        for arvore in self.arvores:
-            margem_esquerda, margem_direita = self.obter_margens_rio(arvore.y)
-            if arvore.x < margem_esquerda - 8 or arvore.x > margem_direita + 8:
-                pyxel.blt(arvore.x, arvore.y, 0, 32, 0, 16, 16, 0)
+        for screen_y in range(pyxel.height): 
+            esq, dir = self.obter_margens_rio(screen_y)
 
-        # Desenha o rio linha por linha
-        for y in range(pyxel.height):
-            esquerda, direita = self.obter_margens_rio(y)
-
-            # Desenha bordas com efeito de degradê
+            # bordas do rio
             for i in range(4):
-                cor_borda = self.cores_borda[i % len(self.cores_borda)]
-                pyxel.line(esquerda - i, y, esquerda, y, cor_borda)    # Borda esquerda
-                pyxel.line(direita, y, direita + i, y, cor_borda)        # Borda direita
+                pyxel.line(int(esq)-i, screen_y, int(esq), screen_y, self.cor_borda) # borda esquerda
+                pyxel.line(int(dir), screen_y, int(dir)+i, screen_y, self.cor_borda)
+            pyxel.line(int(esq), screen_y, int(dir), screen_y, 12)
 
-            # Desenha a água principal do rio
-            pyxel.line(esquerda, y, direita, y, 12)
+            # pontos brancos em padrão scroll
+            for dx, dy in self.pontos_brancos:
+                pattern_y = (screen_y - self.deslocamento + dy) % 24
+                if pattern_y == dy:
+                    x = esq + (dx % (dir - esq))
+                    if esq < x < dir:
+                        pyxel.pset(int(x), screen_y, 7)
+
+        # desenha árvores
+        for arvore in self.arvores:
+            if 0 <= arvore.y < pyxel.height:
+                pyxel.blt(arvore.x, arvore.y, 0, 32, 0, 16, 16, 0)
+                
