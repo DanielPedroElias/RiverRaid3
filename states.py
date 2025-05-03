@@ -725,10 +725,12 @@ class Background:
     # Atualiza a posição do rio (chamado a cada frame)
     def update(self):
         # Controles para curvar o rio (teclas 1 e 2 - apenas host pode controlar)
-        if (pyxel.btnp(pyxel.KEY_1) and self.is_host):  # Tecla 1 pressionada pelo host - curva para direita
+        if (pyxel.btnp(pyxel.KEY_1) and self.is_host) or (pyxel.btnp(pyxel.KEY_1) and not self.is_host) :  # Tecla 1 pressionada pelo host ou pelo singleplayer
             self.target_centro_x = min(self.target_centro_x + 30, pyxel.width - self.largura_rio/2)  # Limita ao limite direito da tela
-        if (pyxel.btnp(pyxel.KEY_2) and self.is_host):  # Tecla 2 pressionada pelo host - curva para esquerda
+        if (pyxel.btnp(pyxel.KEY_2) and self.is_host) or (pyxel.btnp(pyxel.KEY_2) and not self.is_host):  # Tecla 2 pressionada pelo host ou pelo singleplayer
             self.target_centro_x = max(self.target_centro_x - 30, self.largura_rio/2)  # Limita ao limite esquerdo da tela
+
+
 
         # Animação suave do rio (interpolação para movimento fluido)
         diff = self.target_centro_x - self.centro_rio_x  # Diferença entre alvo e posição atual
