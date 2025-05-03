@@ -6,6 +6,7 @@
 # Bibliotecas
 import pyxel            # Engine do jogo
 from config import *    # Importa constantes e configuracoes do arquivo "config.py"
+from entities import *  # Importa as classes de entidades do jogo (jogador, arvores, etc.)
 
 # Classe para o Menu Principal do jogo
 class MenuState:
@@ -296,34 +297,29 @@ class ConnectState:
 
 # Classe que tem o submenu em que o cliente aguarda o host iniciar o jogo
 class WaitingForHostState:
-    # Construtor
-    def __init__(self, game):# "game" eh passado no construtor da classe "Game" do "main.py", sendo a instancia do jogo
-        self.game = game # Recebe a instancia do jogo
-        self.message = "Aguardando host iniciar o jogo..." # Mensagem que vai ser escrita nesse menu
-        self.waiting = True # Marca se o Host iniciou ou nao a partida
+    def __init__(self, game):
+        self.game = game
+        self.message = "Aguardando host iniciar o jogo..."
+        self.waiting = True
 
-    # Verifica se o Host iniciou ou nao a partida
     def update(self):
-        # Verifica se o host enviou sinal para iniciar o jogo
-        d = self.game.network.data # Dado enviado pelo host
-        # 1 - Se vier um pacote de "game_data" (payload como lista), o host ja comecou o jogo antes do cliente entrar
-        if isinstance(d, list):
-            self.game.change_state(GameState(self.game, is_multiplayer=True, is_host= True)) # Entra diretamente no jogo
-            return
-
-        # 2 - Se o host nao iniciou ainda, espera ele iniciar o jogo
+        d = self.game.network.data
         if isinstance(d, dict) and d.get('type') == 'game_start':
-            self.game.change_state(GameState(self.game, is_multiplayer=True, is_host=False))
+            self.game.change_state(GameState(
+                self.game,
+                is_multiplayer=True,
+                is_host=False,
+                initial_seed=d.get('seed'),
+                initial_rio_centro=d.get('rio_centro')
+            ))
             return
 
-        # Mantem a conexao ativa (envia heartbeat) para nao dar timeout
         if self.game.network.connected:
             self.game.network.send({'type': 'heartbeat'})
 
-        # Volta ao menu principal se o usuario apertar "Esc"
         if pyxel.btnp(pyxel.KEY_ESCAPE):
-            self.game.network.stop() # Fecha a conexao 
-            self.game.change_state(MenuState(self.game)) # Volta para o menu principal
+            self.game.network.stop()
+            self.game.change_state(MenuState(self.game))
 
     # Desenha informacoes para o usario na tela
     def draw(self):
@@ -336,23 +332,44 @@ class WaitingForHostState:
 
 # Classe que contem o submenu para 'Hostear' um jogo
 class HostGameState:
-    # Construtor
-    # Configura estado de hospedagem do jogo
-    def __init__(self, game): # "game" eh passado no construtor da classe "Game" do "main.py", sendo a instancia do jogo
-        self.game = game # Recebe a instancia do jogo
-        self.message = "" # Mensagem de sucesso/erro de conexao 
-        self.message_timer = 0 # Quanto tempo (frames) a mensagem de sucesso/erro de conexao ficara sendo exibida
+    def __init__(self, game):
+        self.game = game
+        self.message = ""
+        self.message_timer = 0
         
-        # Inicia host automaticamente
         if self.game.network.start_host():
-            self.ip   = self.game.network.local_ip  # Pega o IP local
-            self.port = self.game.network.port      # Pega a Porta 
-        # Caso de algum erro ao inciar o host
+            self.ip = self.game.network.local_ip
+            self.port = self.game.network.port
         else:
             self.ip = "—"
             self.port = "—"
             self.message = "Erro ao iniciar host"
             self.message_timer = MESSAGE_DISPLAY_TIME
+
+    def update(self):
+        if self.game.network.connected:
+            self.game.network.send({'type': 'heartbeat'})
+
+        if pyxel.btnp(pyxel.KEY_RETURN):
+            # Cria o estado do jogo primeiro
+            game_state = GameState(self.game, is_multiplayer=True, is_host=True)
+            
+            # Envia dados iniciais
+            initial_data = {
+                'type': 'game_start',
+                'seed': game_state.background.tree_manager.random_seed,
+                'rio_centro': game_state.background.centro_rio_x
+            }
+            self.game.network.send(initial_data)
+            
+            self.game.change_state(game_state)
+
+        if pyxel.btnp(pyxel.KEY_ESCAPE):
+            self.game.network.stop()
+            self.game.change_state(MultiplayerMenuState(self.game))
+
+        if self.message_timer > 0:
+            self.message_timer -= 1
     
 
         
@@ -463,25 +480,34 @@ class PauseMenuState:
             #   - 2 opcao: (i = 1): 60 + (1*20) = 80
             # "opt" recebe o texto de cada opcao
             pyxel.text(50, 60 + (i*20), opt, color)
+from collections import deque
 
 # Classe que gerencia o jogo principal (todos os estados, players, comunicacao via rede, etc.)
 class GameState:
-    # Construtor
-    # Estado principal onde o jogo acontece
-    def __init__(self, game, is_multiplayer=False, is_host=False): # "game" eh passado no construtor da classe "Game" do "main.py", sendo a instancia do jogo
-        self.game = game # Recebe a instancia do jogo
-        self.player_x = 50 # Posicao inicial em X do jogador
-        self.player_y = 50 # Posicao inicial em Y do jogador
+    def __init__(self, game, is_multiplayer=False, is_host=False, initial_seed=None, initial_rio_centro=None):
+        self.game = game
+        self.is_multiplayer = is_multiplayer
+        self.is_host = is_host
 
-        self.is_multiplayer = is_multiplayer # Recebe se o jogo estah com multiplayer ativo ou nao
-        self.is_host = is_host  # Novo parâmetro para identificar o host
-        self.player2_x = 0 # Posicao inicial em X do segundo jogador
-        self.player2_y = 0 # Posicao inicial em Y do segundo jogador 
+        if is_host:
+            self.player_x, self.player_y = 59, 104
+            self.player2_x, self.player2_y = 79, 104
+        else:
+            self.player_x, self.player_y = 79, 104
+            self.player2_x, self.player2_y = 59, 104
+
+        self.background = Background(is_host=is_host)
         
-        self.background = Background()  
-
-    
-    # Gerencia a logica do jogo
+        # Sincronização inicial
+        if initial_seed:
+            self.background.tree_manager.random_seed = initial_seed
+            random.seed(initial_seed)
+            self.background.tree_manager.reset_arvores()
+        
+        if initial_rio_centro and not is_host:
+            self.background.centro_rio_x = initial_rio_centro
+            self.background.target_centro_x = initial_rio_centro
+                # Gerencia a logica do jogo
     def update(self):
         
         self.background.update()  
@@ -497,15 +523,15 @@ class GameState:
             self.game.change_state(PauseMenuState(self.game)) # Troca o estado para o menu de pause
             return  # Sai da atualizacao
 
-        # Atualiza logica do jogo (movimento, colisoes, rede)
-        if pyxel.btn(pyxel.KEY_A):
-            self.player_x -= PLAYER_SPEED
-        if pyxel.btn(pyxel.KEY_D):
-            self.player_x += PLAYER_SPEED
-        if pyxel.btn(pyxel.KEY_W):
-            self.player_y -= PLAYER_SPEED
-        if pyxel.btn(pyxel.KEY_S):
-            self.player_y += PLAYER_SPEED
+        if not self.is_multiplayer or (self.is_multiplayer and self.game.network.connected):
+            if pyxel.btn(pyxel.KEY_A):
+                self.player_x -= PLAYER_SPEED
+            if pyxel.btn(pyxel.KEY_D):
+                self.player_x += PLAYER_SPEED
+            if pyxel.btn(pyxel.KEY_W):
+                self.player_y -= PLAYER_SPEED
+            if pyxel.btn(pyxel.KEY_S):
+                self.player_y += PLAYER_SPEED
 
         # Colisão com as bordas da tela 
         self.player_x = max(0, min(self.player_x, SCREEN_WIDTH - PLAYER_WIDTH))
@@ -521,42 +547,11 @@ class GameState:
         #     self.check_river_collision(self.player2_x, self.player2_y, "Jogador 2")
 
         # Colisão com árvores para ambos os jogadores
-        self.check_tree_collision(self.player_x, self.player_y, "Jogador 1")
+        check_tree_collision(self.player_x, self.player_y, self.background.tree_manager.arvores, "Jogador 1")
         if self.is_multiplayer:
-            self.check_tree_collision(self.player2_x, self.player2_y, "Jogador 2")
+            check_tree_collision(self.player2_x, self.player2_y, self.background.tree_manager.arvores, "Jogador 2")
 
-    def check_tree_collision(self, player_x, player_y, player_name):
-        # Hitbox do jogador com offset
-        jogador_left = player_x + 2
-        jogador_right = player_x + PLAYER_WIDTH - 2
-        jogador_top = player_y + 2
-        jogador_bottom = player_y + PLAYER_HEIGHT - 2
-
-        # Lista temporária para armazenar árvores colididas
-        arvores_para_remover = []
-
-        # Verifica colisão com cada árvore
-        for arvore in self.background.arvores:
-            # Pega a hitbox da árvore
-            arv_left, arv_top, arv_right, arv_bottom = arvore.hitbox
-
-            # Detecção de colisão AABB
-            if (jogador_right > arv_left and
-                jogador_left < arv_right and
-                jogador_bottom > arv_top and
-                jogador_top < arv_bottom):
-                
-                # Marca árvore para remoção
-                arvores_para_remover.append(arvore)
-                print(f"{player_name} colidiu com uma árvore!")
-
-        # Remove as árvores colididas
-        for arvore in arvores_para_remover:
-            if arvore in self.background.arvores:
-                self.background.arvores.remove(arvore)
         
-        return len(arvores_para_remover) > 0
-                
     
     def check_river_collision(self, x, y, player_name):
         """Verifica se o jogador está fora das margens do rio."""
@@ -568,25 +563,34 @@ class GameState:
             print(f"{player_name} colidiu com a margem do rio!")
             print(f"Posição: ({x}, {y})")
 
-    # Envia dados do jogador para a rede
     def send_data(self):
-        # Enviar dados se estiver em multiplayer e conectados (tanto host quanto cliente)
         if self.is_multiplayer and self.game.network.connected:
-            self.game.network.send([self.player_x, self.player_y])
+            data = {
+                'player': [self.player_x, self.player_y],
+                'rio_centro': self.background.centro_rio_x,
+                'seed': self.background.tree_manager.random_seed,
+                'type': 'game_update'
+            }
+            self.game.network.send(data)
 
-    # Processa dados recebidos da rede
     def receive_data(self):
-        # Apenas interpreta os dados se tiver no Multiplayer,
-        # vier uma lista/tupla de pelo menos 2 numeros (de tamanho maior ou igual a 2)
-        if self.is_multiplayer and isinstance(self.game.network.data, (list, tuple)) and len(self.game.network.data) >= 2:
+        if self.is_multiplayer and isinstance(self.game.network.data, dict):
+            data = self.game.network.data
             try:
-                # Atualiza a posicao do segundo jogador
-                self.player2_x = self.game.network.data[0]
-                self.player2_y = self.game.network.data[1]
-            
-            # Se ocorrer um erro, imprime no terminal
-            except (IndexError, TypeError):
-                print("Dados recebidos inválidos")
+                self.player2_x, self.player2_y = data['player']
+                
+                if not self.is_host:
+                    self.background.centro_rio_x = data['rio_centro']
+                    self.background.target_centro_x = data['rio_centro']
+                
+                if 'seed' in data and data['seed'] != self.background.tree_manager.random_seed:
+                    self.background.tree_manager.random_seed = data['seed']
+                    random.seed(data['seed'])
+                    self.background.tree_manager.reset_arvores()
+                    
+            except (KeyError, TypeError):
+                print("Erro na sincronização dos dados")
+
 
     # Renderiza mapa, jogador e elementos do jogo
     def draw(self):
@@ -619,12 +623,14 @@ class GameState:
         elif self.is_multiplayer:
             pyxel.text(10, 10, "Multiplayer - Desconectado", COLOR_TEXT_HIGHLIGHT)
         
-        print(f"Posição Jogador 1: ({self.player_x}, {self.player_y})") 
+        # Debug: mostra posições claramente
+        pyxel.text(10, 20, f"Host: {self.player_x},{self.player_y}", 7)
+        pyxel.text(10, 30, f"Cliente: {self.player2_x},{self.player2_y}", 7)
 
         # Desenha o outro jogador
         if self.is_multiplayer:
             if self.game.network.connected:
-                pyxel.text(10, 10, "Multiplayer - Conectado", COLOR_TEXT_HIGHLIGHT)
+                pyxel.text(10, 10, "Multiplayer - Conectado", 0)
                 # Inverte a skin para o outro jogador
                 if self.is_host:
                     # Host vê o cliente como helicóptero
@@ -633,219 +639,73 @@ class GameState:
                     # Cliente vê o host como avião
                     pyxel.blt(self.player2_x, self.player2_y, 0, 48, 0, PLAYER_WIDTH, PLAYER_HEIGHT, colkey=0)
             else:
-                pyxel.text(10, 10, "Multiplayer - Desconectado", COLOR_TEXT_HIGHLIGHT)
+                pyxel.text(10, 10, "Multiplayer - Desconectado", 0)
 
         # Desenha hitbox das árvores (debug)
-        for arvore in self.background.arvores:
+        for arvore in self.background.tree_manager.arvores:
             arv_left, arv_top, arv_right, arv_bottom = arvore.hitbox
             pyxel.rectb(arv_left, arv_top, arv_right - arv_left, arv_bottom - arv_top, 8)
-
-class Tree:
-    def __init__(self, x, y):
-        self.x = x
-        self.y = y
-        self.width = 16  # Largura do sprite da árvore
-        self.height = 16  # Altura do sprite da árvore
-
-    @property
-    def hitbox(self):
-        # Retorna retângulo de colisão (esquerda, topo, direita, baixo)
-        return (
-            self.x + 2,  # Offset para hitbox mais precisa
-            self.y + 2,
-            self.x + self.width - 2,
-            self.y + self.height - 2
-        )
 
 from collections import deque
 import pyxel, random
 
 class Background:
-    
-    def __init__(self):
-        # scroll vertical do padrão do rio
+    def __init__(self, is_host=False):  # Linha modificada
+        self.is_host = is_host  # Nova linha
+        # Configurações do rio
         self.velocidade_scroll = 1
         self.deslocamento = 0
-
-        # largura e cor da borda
         self.largura_rio = 45
         self.cor_borda = 15
-
-        # centro inicial (metade da tela)
         self.centro_rio_x = pyxel.width / 2
         self.target_centro_x = self.centro_rio_x
-
-        # quão rápido o rio “anima” para a target por frame
         self.curve_speed = 1.0
-
-        # histórico de centros (novo em índice 0, velho é descartado)
-        self.centros_hist = deque([self.centro_rio_x] * pyxel.height,
-                                  maxlen=pyxel.height)
-
-        # padrão de pontos brancos
-        self.pontos_brancos = [
-            (3, 2), (10, 5), (15, 8), (25, 3), (30, 7),
-            (5, 14), (20, 12), (28, 16), (12, 20), (18, 18)
-        ]
-
-        # árvores 
-        self.distancia_rio = 2
-        self.margem_lateral = 2
-        self.max_arvores = 30
-        self.arvores = [self.criar_arvore_fora_tela() for _ in range(self.max_arvores)]
-
-    def criar_arvore_fora_tela(self):
-        """Só retorna Tree(x,y) com x *fora* das margens do rio."""
-        y = random.randint(-pyxel.height, 0)
-        tree_w = 16
-
-        # Como a árvore vai aparecer em screen_y == 0,
-        # já pegamos as margens dali:
-        esq0, dir0 = self.obter_margens_rio(0)
-
-        # Intervalos seguros:
-        left_min  = self.margem_lateral
-        left_max  = int(esq0 - self.distancia_rio - tree_w)
-        right_min = int(dir0 + self.distancia_rio)
-        right_max = pyxel.width - self.margem_lateral - tree_w
-
-        # Loop até achar x fora das margens
-        while True:
-            # escolhe aleatoriamente um dos lados válidos
-            if left_min <= left_max and random.random() < 0.5:
-                x = random.randint(left_min, left_max)
-            elif right_min <= right_max:
-                x = random.randint(right_min, right_max)
-            else:
-                x = self.margem_lateral
-
-            if not (esq0 < x < dir0):
-                break
-
-        return Tree(x, y)
-
-
-    def reposicionar_arvore(self, arvore):
-        """Reposiciona atribuindo arvore.x/y, mas só fora do rio."""
-        nova = self.criar_arvore_fora_tela()
-        arvore.x = nova.x
-        arvore.y = nova.y
-
-
-    def _novo_x_fora_do_rio(self, esq, dir, y):
-        """Gera um x que fique fora de (esq,dir), via loop garantido."""
-        tree_w = 16
-        left_min  = self.margem_lateral
-        left_max  = int(esq - self.distancia_rio - tree_w)
-        right_min = int(dir + self.distancia_rio)
-        right_max = pyxel.width - self.margem_lateral - tree_w
-
-        while True:
-            if left_min <= left_max and right_min <= right_max:
-                if random.random() < 0.5:
-                    x = random.randint(left_min, left_max)
-                else:
-                    x = random.randint(right_min, right_max)
-            elif left_min <= left_max:
-                x = random.randint(left_min, left_max)
-            elif right_min <= right_max:
-                x = random.randint(right_min, right_max)
-            else:
-                x = self.margem_lateral
-
-            # se x estiver fora do rio previsto, aceita
-            if not (esq < x < dir):
-                return x, y
-
-    def reposicionar_arvore(self, arvore):
-        """Reposiciona a árvore logo acima, sempre fora do rio."""
-        # Aproveita a mesma lógica de criar_arvore_fora_tela
-        nova = self.criar_arvore_fora_tela()
-        arvore.x, arvore.y = nova.x, nova.y
+        self.centros_hist = deque([self.centro_rio_x] * pyxel.height, maxlen=pyxel.height)
+        self.pontos_brancos = [(3, 2), (10, 5), (15, 8), (25, 3), (30, 7), (5, 14), (20, 12), (28, 16), (12, 20), (18, 18)]
+        
+        # Gerenciador de árvores
+        self.tree_manager = TreeManager(self)  # Usa o TreeManager do entities.py
 
     def obter_margens_rio(self, screen_y):
-        """
-        Retorna (margem_esq, margem_dir) para a linha screen_y,
-        exatamente como desenhado.
-        """
         centro = self.centros_hist[screen_y]
         meia = self.largura_rio / 2
         return centro - meia, centro + meia
 
     def update(self):
-        # ─── controle por tecla ───
+        # Controle do rio (mantido)
         if pyxel.btnp(pyxel.KEY_1):
-            # mover alvo 30px para a direita
-            self.target_centro_x = min(self.target_centro_x + 30,
-                                       pyxel.width - self.largura_rio/2)
+            self.target_centro_x = min(self.target_centro_x + 30, pyxel.width - self.largura_rio/2)
         if pyxel.btnp(pyxel.KEY_2):
-            # mover alvo 30px para a esquerda
-            self.target_centro_x = max(self.target_centro_x - 30,
-                                       self.largura_rio/2)
+            self.target_centro_x = max(self.target_centro_x - 30, self.largura_rio/2)
 
-        # ─── animação suave ───
+        # Animação suave do rio
         diff = self.target_centro_x - self.centro_rio_x
         if abs(diff) > self.curve_speed:
             self.centro_rio_x += self.curve_speed * (1 if diff > 0 else -1)
         else:
             self.centro_rio_x = self.target_centro_x
 
-        # empurra pro topo do histórico
         self.centros_hist.appendleft(self.centro_rio_x)
-
-        # scroll vertical do padrão do rio
         self.deslocamento += self.velocidade_scroll
 
-        # Garante número máximo de árvores
-        while len(self.arvores) < self.max_arvores:
-            self.arvores.append(self.criar_arvore_fora_tela())
-
-        # Garante número máximo de árvores
-        while len(self.arvores) < self.max_arvores:
-            self.arvores.append(self.criar_arvore_fora_tela())
-
-        # Move e valida cada árvore
-        for arvore in self.arvores:
-            arvore.y += self.velocidade_scroll
-
-            # se saiu da tela embaixo, joga pra cima
-            if arvore.y > pyxel.height:
-                self.reposicionar_arvore(arvore)
-
-            # AGORA garanta 0% de chance de ficar sobre o rio:
-            # verifica margens na altura atual
-            screen_y = min(max(int(arvore.y), 0), pyxel.height - 1)
-            esq, dir = self.obter_margens_rio(screen_y)
-
-            # enquanto estiver dentro do rio, reposiciona de novo
-            while esq < arvore.x < dir:
-                self.reposicionar_arvore(arvore)
-                # e recalc margens para a nova y
-                screen_y = min(max(int(arvore.y), 0), pyxel.height - 1)
-                esq, dir = self.obter_margens_rio(screen_y)
+        # Atualiza árvores via TreeManager
+        self.tree_manager.update_arvores(self.velocidade_scroll)
 
     def draw(self):
-        pyxel.rect(0, 0, pyxel.width, pyxel.height, 9)  # fundo
-
-        for screen_y in range(pyxel.height): 
+        # Desenho do rio (mantido)
+        pyxel.rect(0, 0, pyxel.width, pyxel.height, 9)
+        for screen_y in range(pyxel.height):
             esq, dir = self.obter_margens_rio(screen_y)
-
-            # bordas do rio
             for i in range(4):
-                pyxel.line(int(esq)-i, screen_y, int(esq), screen_y, self.cor_borda) # borda esquerda
+                pyxel.line(int(esq)-i, screen_y, int(esq), screen_y, self.cor_borda)
                 pyxel.line(int(dir), screen_y, int(dir)+i, screen_y, self.cor_borda)
             pyxel.line(int(esq), screen_y, int(dir), screen_y, 12)
-
-            # pontos brancos em padrão scroll
             for dx, dy in self.pontos_brancos:
                 pattern_y = (screen_y - self.deslocamento + dy) % 24
                 if pattern_y == dy:
                     x = esq + (dx % (dir - esq))
                     if esq < x < dir:
                         pyxel.pset(int(x), screen_y, 7)
-
-        # desenha árvores
-        for arvore in self.arvores:
-            if 0 <= arvore.y < pyxel.height:
-                pyxel.blt(arvore.x, arvore.y, 0, 32, 0, 16, 16, 0)
-                
+        
+        # Desenha árvores via TreeManager
+        self.tree_manager.draw_arvores()
