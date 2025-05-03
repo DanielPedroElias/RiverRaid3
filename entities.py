@@ -118,7 +118,7 @@ class TreeManager:
         for arvore in self.arvores:
             if 0 <= arvore.y < pyxel.height:
                 pyxel.blt(arvore.x, arvore.y, 0,
-                          32, 0,
+                          0, 0,
                           self.tree_w, self.tree_w,
                           0)
 
@@ -129,7 +129,7 @@ def check_tree_collision(player_x, player_y, arvores, player_name):
     jogador_top = player_y + 2
     jogador_bottom = player_y + PLAYER_HEIGHT - 2
 
-    arvores_para_remover = []
+    colisoes = 0  # Contador de colisões
     
     for arvore in arvores:
         arv_left, arv_top, arv_right, arv_bottom = arvore.hitbox
@@ -137,11 +137,7 @@ def check_tree_collision(player_x, player_y, arvores, player_name):
             jogador_left < arv_right and
             jogador_bottom > arv_top and
             jogador_top < arv_bottom):
-            arvores_para_remover.append(arvore)
-            print(f"{player_name} colidiu com uma árvore!")
+            colisoes += 1
+            print(f"{player_name} colidiu com uma árvore! (-1 vida)")
     
-    for arvore in arvores_para_remover:
-        if arvore in arvores:
-            arvores.remove(arvore)
-    
-    return len(arvores_para_remover) > 0
+    return colisoes  # Retorna o número de colisões neste frame

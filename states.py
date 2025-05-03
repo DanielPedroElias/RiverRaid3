@@ -497,7 +497,13 @@ class GameState:
             self.player2_x, self.player2_y = 59, 104
 
         self.background = Background(is_host=is_host)
-        
+
+        self.vida_jogador1 = 3
+        self.vida_jogador2 = 3
+        self.invincible_timer_j1 = 0  # Nova variável
+        self.invincible_timer_j2 = 0  # Nova variável
+        self.INVINCIBILITY_DURATION = 90  # 1.5 segundos em 60 FPS
+
         # Sincronização inicial
         if initial_seed:
             self.background.tree_manager.random_seed = initial_seed
@@ -537,19 +543,31 @@ class GameState:
         self.player_x = max(0, min(self.player_x, SCREEN_WIDTH - PLAYER_WIDTH))
         self.player_y = max(0, min(self.player_y, SCREEN_HEIGHT - PLAYER_HEIGHT))
 
+        # Atualiza temporizadores de invencibilidade
+        if self.invincible_timer_j1 > 0:
+            self.invincible_timer_j1 -= 1
+            
+        if self.invincible_timer_j2 > 0:
+            self.invincible_timer_j2 -= 1
+
         # Verifica todas as colisões
         self.check_all_collisions()
 
     def check_all_collisions(self):
-        # Colisão com margens do rio
-        # self.check_river_collision(self.player_x, self.player_y, "Jogador 1")
-        # if self.is_multiplayer:
-        #     self.check_river_collision(self.player2_x, self.player2_y, "Jogador 2")
+        # Verifica colisões só se não estiver invencível
+        if self.invincible_timer_j1 <= 0:
+            colisoes = check_tree_collision(self.player_x, self.player_y, 
+                                          self.background.tree_manager.arvores, "Jogador 1")
+            if colisoes > 0:
+                self.vida_jogador1 = max(0, self.vida_jogador1 - 1)
+                self.invincible_timer_j1 = self.INVINCIBILITY_DURATION  # Ativa invencibilidade
 
-        # Colisão com árvores para ambos os jogadores
-        check_tree_collision(self.player_x, self.player_y, self.background.tree_manager.arvores, "Jogador 1")
-        if self.is_multiplayer:
-            check_tree_collision(self.player2_x, self.player2_y, self.background.tree_manager.arvores, "Jogador 2")
+        if self.is_multiplayer and self.invincible_timer_j2 <= 0:
+            colisoes = check_tree_collision(self.player2_x, self.player2_y,
+                                          self.background.tree_manager.arvores, "Jogador 2")
+            if colisoes > 0:
+                self.vida_jogador2 = max(0, self.vida_jogador2 - 1)
+                self.invincible_timer_j2 = self.INVINCIBILITY_DURATION
 
         
     
@@ -597,31 +615,40 @@ class GameState:
         # Limpa a tela
         pyxel.cls(COLOR_BG)
         self.background.draw()
-        
-        # Desenha o jogador local
+
+        # Exibe as vidas na tela
+        pyxel.text(10, 40, f"Vidas J1: {self.vida_jogador1}", 0)
         if self.is_multiplayer:
-            if self.is_host:
-                # Host: avião (48,0)
-                pyxel.blt(self.player_x, self.player_y, 0, 48, 0, PLAYER_WIDTH, PLAYER_HEIGHT, colkey=0)
-
-            else:
-                # Cliente: helicóptero (0,16)
-                pyxel.blt(self.player_x, self.player_y, 0, 0, 16, PLAYER_WIDTH, PLAYER_HEIGHT, colkey=0)
+            pyxel.text(100, 50, f"Vidas J2: {self.vida_jogador2}", 0)
+        
+       # Desenha o jogador local com efeito de piscar
+        if self.invincible_timer_j1 > 0:
+            # Pisca a cada 5 frames (ajuste o valor para mudar a velocidade)
+            should_draw = (pyxel.frame_count // 3) % 2 == 0
         else:
-            # Singleplayer: avião padrão
-            pyxel.blt(self.player_x, self.player_y, 0, 48, 0, PLAYER_WIDTH, PLAYER_HEIGHT, colkey=0)
+            should_draw = True
 
-        # Desenha o outro jogador (multiplayer)
-        if self.is_multiplayer and self.game.network.connected:
-            pyxel.text(10, 10, "Multiplayer - Conectado", COLOR_TEXT_HIGHLIGHT)
-            if self.is_host:
-                # Host vê cliente como helicóptero
-                pyxel.blt(self.player2_x, self.player2_y, 0, 0, 16, PLAYER_WIDTH, PLAYER_HEIGHT, colkey=0)
+        if should_draw:
+            if self.is_multiplayer:
+                if self.is_host:
+                    pyxel.blt(self.player_x, self.player_y, 0, 32, 0, PLAYER_WIDTH, PLAYER_HEIGHT, colkey=0)
+                else:
+                    pyxel.blt(self.player_x, self.player_y, 0, 48, 0, PLAYER_WIDTH, PLAYER_HEIGHT, colkey=0)
             else:
-                # Cliente vê host como avião
-                pyxel.blt(self.player2_x, self.player2_y, 0, 48, 0, PLAYER_WIDTH, PLAYER_HEIGHT, colkey=0)
-        elif self.is_multiplayer:
-            pyxel.text(10, 10, "Multiplayer - Desconectado", COLOR_TEXT_HIGHLIGHT)
+                pyxel.blt(self.player_x, self.player_y, 0, 32, 0, PLAYER_WIDTH, PLAYER_HEIGHT, colkey=0)
+
+        # Repita a mesma lógica para o jogador 2 se necessário
+        if self.is_multiplayer and self.game.network.connected:
+            if self.invincible_timer_j2 > 0:
+                should_draw = (pyxel.frame_count // 3) % 2 == 0
+            else:
+                should_draw = True
+
+            if should_draw:
+                if self.is_host:
+                    pyxel.blt(self.player2_x, self.player2_y, 0, 48, 0, PLAYER_WIDTH, PLAYER_HEIGHT, colkey=0)
+                else:
+                    pyxel.blt(self.player2_x, self.player2_y, 0, 32, 0, PLAYER_WIDTH, PLAYER_HEIGHT, colkey=0)
         
         # Debug: mostra posições claramente
         pyxel.text(10, 20, f"Host: {self.player_x},{self.player_y}", 7)
@@ -634,10 +661,10 @@ class GameState:
                 # Inverte a skin para o outro jogador
                 if self.is_host:
                     # Host vê o cliente como helicóptero
-                    pyxel.blt(self.player2_x, self.player2_y, 0, 0, 16, PLAYER_WIDTH, PLAYER_HEIGHT, colkey=0)
+                    pyxel.blt(self.player2_x, self.player2_y, 0, 48, 0, PLAYER_WIDTH, PLAYER_HEIGHT, colkey=0)
                 else:
                     # Cliente vê o host como avião
-                    pyxel.blt(self.player2_x, self.player2_y, 0, 48, 0, PLAYER_WIDTH, PLAYER_HEIGHT, colkey=0)
+                    pyxel.blt(self.player2_x, self.player2_y, 0, 32, 0, PLAYER_WIDTH, PLAYER_HEIGHT, colkey=0)
             else:
                 pyxel.text(10, 10, "Multiplayer - Desconectado", 0)
 
