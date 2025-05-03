@@ -1,143 +1,180 @@
-# entities.py
-import pyxel
-import random
-from collections import deque
-
-from config import *
+# Importações necessárias para o módulo
+import pyxel          # Biblioteca para criação do jogo
+import random         # Para geração de números aleatórios
+from collections import deque  # Para estrutura de dados eficiente
+from config import *  # Importa constantes do jogo
 
 class Tree:
+    """Classe que representa uma árvore no jogo"""
     def __init__(self, x, y):
-        self.x = x
-        self.y = y
-
-        self.width = 16
-        self.height = 16
+        # Posição inicial da árvore
+        self.x = x  # Coordenada X no mapa
+        self.y = y  # Coordenada Y no mapa
+        
+        # Dimensões do sprite da árvore
+        self.width = 16   # Largura do sprite
+        self.height = 16  # Altura do sprite
 
     @property
     def hitbox(self):
+        """Retorna a área de colisão da árvore (menor que o sprite visual)"""
         return (
-            self.x + 2,
-            self.y + 2,
-            self.x + self.width - 2,
-            self.y + self.height - 2
+            self.x + 2,          # Left: deslocada 2px para dentro
+            self.y + 2,          # Top: deslocada 2px para dentro
+            self.x + self.width - 2,  # Right: 2px antes da borda direita
+            self.y + self.height - 2   # Bottom: 2px antes da borda inferior
         )
 
 class TreeManager:
+    """Gerenciador responsável por criar e controlar todas as árvores do jogo"""
     def __init__(self, background):
-        self.background = background
-        self.distancia_rio = 2
-        self.margem_lateral = 2
-        self.max_arvores = 40
-        self.tree_w = 16
-        self.arvores = [self.criar_arvore_fora_tela() for _ in range(self.max_arvores)]
-        self.distancia_minima = 12
-        self.random_seed = random.randint(0, 1000000)
-        random.seed(self.random_seed)
+        # Referência ao background para verificar margens do rio
+        self.background = background  
+        # Distância mínima entre árvores e o rio
+        self.distancia_rio = 2  
+        # Margem lateral da tela onde árvores podem aparecer
+        self.margem_lateral = 2  
+        # Número máximo de árvores no jogo
+        self.max_arvores = 40  
+        # Largura do sprite da árvore
+        self.tree_w = 16  
+        # Lista de árvores ativas
+        self.arvores = [self.criar_arvore_fora_tela() for _ in range(self.max_arvores)]  
+        # Distância mínima entre árvores
+        self.distancia_minima = 12  
+        # Seed aleatória para geração consistente
+        self.random_seed = random.randint(0, 1000000)  
+        random.seed(self.random_seed)  # Define a seed para o random
 
     def reset_arvores(self):
+        """Reinicia todas as árvores usando a mesma seed aleatória"""
         random.seed(self.random_seed)
         self.arvores = [self.criar_arvore_fora_tela() for _ in range(self.max_arvores)]
         
     def _arvore_valida(self, nova_arvore):
-        """Verifica se a nova árvore não está muito próxima das existentes."""
+        """Verifica se a nova árvore não está muito próxima das existentes"""
         for arv in self.arvores:
+            # Checa distância mínima entre árvores
             if self._calcular_distancia(arv, nova_arvore) < self.distancia_minima:
                 return False
         return True
     
     def _calcular_distancia(self, arv1, arv2):
-        """Calcula a distância entre os centros das hitboxes."""
-        x1 = (arv1.hitbox[0] + arv1.hitbox[2]) / 2
-        y1 = (arv1.hitbox[1] + arv1.hitbox[3]) / 2
-        x2 = (arv2.hitbox[0] + arv2.hitbox[2]) / 2
-        y2 = (arv2.hitbox[1] + arv2.hitbox[3]) / 2
-        return ((x2 - x1)**2 + (y2 - y1)**2)**0.5
+        """Calcula distância euclidiana entre os centros das hitboxes"""
+        # Centro X da primeira árvore
+        x1 = (arv1.hitbox[0] + arv1.hitbox[2]) / 2  
+        # Centro Y da primeira árvore
+        y1 = (arv1.hitbox[1] + arv1.hitbox[3]) / 2  
+        # Centro X da segunda árvore
+        x2 = (arv2.hitbox[0] + arv2.hitbox[2]) / 2  
+        # Centro Y da segunda árvore
+        y2 = (arv2.hitbox[1] + arv2.hitbox[3]) / 2  
+        # Fórmula de distância entre dois pontos
+        return ((x2 - x1)**2 + (y2 - y1)**2)**0.5  
     
     def criar_arvore_fora_tela(self):
-        y = random.randint(-pyxel.height, 0)
-        # Margens no ponto em que a árvore aparecerá (screen_y == 0)
-        esq0, dir0 = self.background.obter_margens_rio(0)
-        return self._novo_tree_fora(esq0, dir0, y)
+        """Cria nova árvore posicionada acima da tela visível"""
+        # Posição Y aleatória acima da tela
+        y = random.randint(-pyxel.height, 0)  
+        # Obtém margens do rio no topo da tela
+        esq0, dir0 = self.background.obter_margens_rio(0)  
+        # Cria árvore fora do rio
+        return self._novo_tree_fora(esq0, dir0, y)  
 
     def _novo_tree_fora(self, esq, dir, y):
-        """Loop até achar x DEFINITIVAMENTE fora de (esq,dir)."""
-        left_min  = self.margem_lateral
-        left_max  = int(esq - self.distancia_rio - self.tree_w)
-        right_min = int(dir + self.distancia_rio)
-        right_max = pyxel.width - self.margem_lateral - self.tree_w
+        """Cria nova árvore garantidamente fora das margens do rio"""
+        # Limites para árvores à esquerda do rio
+        left_min = self.margem_lateral  
+        left_max = int(esq - self.distancia_rio - self.tree_w)  
+        # Limites para árvores à direita do rio
+        right_min = int(dir + self.distancia_rio)  
+        right_max = pyxel.width - self.margem_lateral - self.tree_w  
 
-        # repete até sair do rio
+        # Loop até encontrar posição válida
         while True:
+            # Escolhe aleatoriamente entre esquerda/direita (50% de chance)
             if left_min <= left_max and random.random() < 0.5:
-                x = random.randint(left_min, left_max)
+                x = random.randint(left_min, left_max)  # Posição à esquerda
             elif right_min <= right_max:
-                x = random.randint(right_min, right_max)
+                x = random.randint(right_min, right_max)  # Posição à direita
             else:
-                x = self.margem_lateral
+                x = self.margem_lateral  # Fallback
 
+            # Verifica se está fora do rio
             if not (esq < x < dir):
-                return Tree(x, y)
+                return Tree(x, y)  
             
+            # Verifica colisão com outras árvores
             nova_arvore = Tree(x, y)
             if self._arvore_valida(nova_arvore):
                 return nova_arvore
 
     def reposicionar_arvore(self, arvore):
-        """Reposiciona ARVORE até que ela NÃO esteja sobre o rio."""
+        """Reposiciona árvore no topo da tela, fora do rio"""
         while True: 
-            # gera um y acima
-            y = random.randint(-pyxel.height, 0)
-            # obtem margens em screen_y == 0
-            esq0, dir0 = self.background.obter_margens_rio(0)
+            # Nova posição Y acima da tela
+            y = random.randint(-pyxel.height, 0)  
+            # Margens do rio no topo da tela
+            esq0, dir0 = self.background.obter_margens_rio(0)  
 
+            # Cria nova posição válida
             nova = self._novo_tree_fora(esq0, dir0, y)
             if self._arvore_valida(nova):
-                arvore.x, arvore.y = nova.x, nova.y
+                # Atualiza posição da árvore
+                arvore.x, arvore.y = nova.x, nova.y  
                 break
 
     def update_arvores(self, velocidade_scroll):
+        """Atualiza posição das árvores e verifica colisões com o rio"""
         for arvore in self.arvores:
-            arvore.y += velocidade_scroll
+            # Move árvore para baixo (scroll do jogo)
+            arvore.y += velocidade_scroll  
 
-            # se passou do bottom, reposiciona
-            if arvore.y > pyxel.height:
-                self.reposicionar_arvore(arvore)
+            # Se saiu da parte inferior da tela
+            if arvore.y > pyxel.height:  
+                self.reposicionar_arvore(arvore)  # Reposiciona no topo
 
-            # AGORA garanta que ela NÃO esteja dentro do rio em NENHUMA circunstância
-            # obtém screen_y válido
-            screen_y = min(max(int(arvore.y), 0), pyxel.height - 1)
-            esq, dir = self.background.obter_margens_rio(screen_y)
+            # Verifica se árvore está dentro do rio
+            screen_y = min(max(int(arvore.y), 0), pyxel.height - 1)  # Limita Y
+            esq, dir = self.background.obter_margens_rio(screen_y)  # Margens
 
-            # reposiciona até ficar fora
+            # Reposiciona até ficar fora do rio
             while esq < arvore.x < dir:
                 self.reposicionar_arvore(arvore)
                 screen_y = min(max(int(arvore.y), 0), pyxel.height - 1)
                 esq, dir = self.background.obter_margens_rio(screen_y)
 
     def draw_arvores(self):
+        """Desenha todas as árvores visíveis na tela"""
         for arvore in self.arvores:
-            if 0 <= arvore.y < pyxel.height:
-                pyxel.blt(arvore.x, arvore.y, 0,
-                          0, 0,
-                          self.tree_w, self.tree_w,
-                          0)
+            # Verifica se árvore está dentro da área visível
+            if 0 <= arvore.y < pyxel.height:  
+                # Desenha sprite da árvore
+                pyxel.blt(arvore.x, arvore.y, 0,  # Posição e banco de imagens
+                          0, 0,  # Coordenadas do sprite na imagem
+                          self.tree_w, self.tree_w,  # Dimensões
+                          0)  # Cor transparente
 
 
 def check_tree_collision(player_x, player_y, arvores, player_name):
-    jogador_left = player_x + 2
-    jogador_right = player_x + PLAYER_WIDTH - 2
-    jogador_top = player_y + 2
-    jogador_bottom = player_y + PLAYER_HEIGHT - 2
+    """Verifica colisões entre jogador e árvores"""
+    # Define hitbox do jogador (menor que o sprite visual)
+    jogador_left = player_x + 2  # Left: 2px para dentro
+    jogador_right = player_x + PLAYER_WIDTH - 2  # Right: 2px para dentro
+    jogador_top = player_y + 2  # Top: 2px para dentro
+    jogador_bottom = player_y + PLAYER_HEIGHT - 2  # Bottom: 2px para dentro
 
-    colisoes = 0  # Contador de colisões
+    colisoes = 0  # Contador de colisões neste frame
     
+    # Verifica colisão com cada árvore
     for arvore in arvores:
         arv_left, arv_top, arv_right, arv_bottom = arvore.hitbox
+        # Teste de interseção entre retângulos
         if (jogador_right > arv_left and
             jogador_left < arv_right and
             jogador_bottom > arv_top and
             jogador_top < arv_bottom):
-            colisoes += 1
+            colisoes += 1  # Incrementa contador
             print(f"{player_name} colidiu com uma árvore! (-1 vida)")
     
-    return colisoes  # Retorna o número de colisões neste frame
+    return colisoes  # Retorna total de colisões
