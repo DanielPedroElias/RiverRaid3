@@ -315,7 +315,8 @@ class WaitingForHostState:
                 is_multiplayer=True,
                 is_host=False,
                 initial_seed=d.get('seed'),
-                initial_rio_centro=d.get('rio_centro')
+                initial_rio_centro=d.get('rio_centro'),
+                initial_rio_largura=d.get('rio_largura')
             ))
             return
 
@@ -373,7 +374,10 @@ class HostGameState:
             initial_data = {
                 'type': 'game_start',
                 'seed': game_state.background.tree_manager.random_seed,  # Semente aleatória
-                'rio_centro': game_state.background.centro_rio_x  # Posição do rio
+                'rio_centro': game_state.background.centro_rio_x,  # Posição do rio
+                'rio_largura': game_state.background.largura_rio  # Largura do rio
+
+                
             }
             # Envia dados para o cliente
             self.game.network.send(initial_data)
@@ -464,7 +468,7 @@ from collections import deque
 # Classe principal que gerencia o estado do jogo (singleplayer/multiplayer)
 class GameState:
     # Método de inicialização
-    def __init__(self, game, is_multiplayer=False, is_host=False, initial_seed=None, initial_rio_centro=None):
+    def __init__(self, game, is_multiplayer=False, is_host=False, initial_seed=None, initial_rio_centro=None , initial_rio_largura=None):
         self.game = game  # Referência para o objeto principal do jogo
         self.is_multiplayer = is_multiplayer  # Flag para modo multiplayer
         self.is_host = is_host  # Flag para identificar se é o host
@@ -502,6 +506,10 @@ class GameState:
             # Sincroniza a posição do rio para clientes
             self.background.centro_rio_x = initial_rio_centro
             self.background.target_centro_x = initial_rio_centro
+        
+        if initial_rio_largura is not None and not is_host:
+            self.background.largura_rio     = initial_rio_largura
+            self.background.target_largura  = initial_rio_largura
 
     # Método para atualizar o estado do jogo a cada frame
     def update(self):
@@ -584,6 +592,7 @@ class GameState:
             data = {
                 'player': [self.player_x, self.player_y],  # Posição atual
                 'rio_centro': self.background.centro_rio_x,  # Posição do rio
+                'rio_largura': self.background.largura_rio,       # ← NOVO
                 'seed': self.background.tree_manager.random_seed,  # Seed aleatória
                 'invincible': self.invincible_timer_j1 if self.is_host else self.invincible_timer_j2,  # Timer de invencibilidade
                 'type': 'game_update'  # Tipo de mensagem
@@ -626,6 +635,10 @@ class GameState:
                     # Atualiza a posição central atual do rio no background
                     self.background.target_centro_x = data['rio_centro']
                     # Atualiza também a posição alvo (target) do rio para sincronizar a animação
+                
+                if not self.is_host and 'rio_largura' in data:
+                    self.background.largura_rio    = data['rio_largura']
+                    self.background.target_largura = data['rio_largura']
                     
                 # Sincroniza seed aleatória se necessário
                 if 'seed' in data and data['seed'] != self.background.tree_manager.random_seed:
@@ -660,13 +673,32 @@ class GameState:
             else:                                              # Se for o cliente
                 pyxel.blt(self.player2_x, self.player2_y, 0, 32, 0, PLAYER_WIDTH, PLAYER_HEIGHT, colkey=0)  # Desenha o avião do host na posição recebida
 
-        # Renderização do jogador 2
-        if self.is_multiplayer and should_draw_j2:             # Verifica se é multiplayer E se deve desenhar o jogador 2
-            if self.is_host:                                  # Se for o host
-                pyxel.blt(self.player2_x, self.player2_y, 0, 48, 0, PLAYER_WIDTH, PLAYER_HEIGHT, colkey=0)  # Desenha o helicóptero do cliente
-            else:                                              # Se for o cliente
-                pyxel.blt(self.player_x, self.player_y, 0, 48, 0, PLAYER_WIDTH, PLAYER_HEIGHT, colkey=0)  # Desenha o próprio helicóptero (cliente)
-                pyxel.text(10, 60, f"Suas Vidas: {self.vida_jogador2}", 1)  # Mostra contador de vidas do cliente
+       # Renderização do jogador 2 (helicóptero)
+        if self.is_multiplayer and should_draw_j2:
+            # Animação da hélice (alterna entre dois frames a cada 5 frames)
+            helicopter_frame = (pyxel.frame_count // 5) % 2
+            
+            # Coordenadas dos frames na imagem (48,0) e (0,16)
+            u = 48 if helicopter_frame == 0 else 0
+            v = 0 if helicopter_frame == 0 else 16
+
+            if self.is_host:
+                pyxel.blt(
+                    self.player2_x, self.player2_y,
+                    0,            # Banco de imagens
+                    u, v,         # Coordenadas do frame
+                    PLAYER_WIDTH, PLAYER_HEIGHT,
+                    colkey=0
+                )
+            else:
+                pyxel.blt(
+                    self.player_x, self.player_y,
+                    0,            # Banco de imagens
+                    u, v,         # Coordenadas do frame
+                    PLAYER_WIDTH, PLAYER_HEIGHT,
+                    colkey=0
+                )
+                pyxel.text(10, 60, f"Suas Vidas: {self.vida_jogador2}", 1)
 
         # Modo singleplayer
         if not self.is_multiplayer and should_draw_j1:         # Se não for multiplayer E deve desenhar o jogador
@@ -692,83 +724,105 @@ class GameState:
             arv_left, arv_top, arv_right, arv_bottom = arvore.hitbox  # Obtém coordenadas da hitbox
             pyxel.rectb(arv_left, arv_top, arv_right - arv_left, arv_bottom - arv_top, 8)  # Desenha retângulo da hitbox (para debug)
 
-## Classe que gerencia o cenário do jogo (rio e margens)
+# Classe que gerencia o cenário do jogo (rio e margens)
+from collections import deque
+import pyxel
+
 class Background:
-    def __init__(self, is_host=False):  # Construtor da classe Background
-        self.is_host = is_host  # Define se esta instância é o host (controla o rio)
-        
-        # Configurações do rio
-        self.velocidade_scroll = 1  # Velocidade de movimento vertical do cenário
-        self.deslocamento = 0  # Acumulador de deslocamento vertical
-        self.largura_rio = 45  # Largura fixa do rio em pixels
-        self.cor_borda = 15  # Cor branca para as margens do rio (paleta Pyxel)
-        self.centro_rio_x = pyxel.width / 2  # Posição horizontal inicial do centro do rio
-        self.target_centro_x = self.centro_rio_x  # Alvo para animação suave das curvas
-        self.curve_speed = 1.0  # Velocidade de ajuste das curvas do rio
-        
-        # Histórico de posições do rio (armazena posições anteriores para desenho)
-        self.centros_hist = deque([self.centro_rio_x] * pyxel.height, maxlen=pyxel.height)
-        
-        # Pontos brancos no rio (detalhes visuais - padrão de ondulação)
+    def __init__(self, is_host=False):
+        self.is_host = is_host
+
+        # movimento vertical
+        self.velocidade_scroll = 1
+        self.deslocamento = 0
+
+        # largura do rio (agora animável)
+        self.largura_rio = 45
+        self.target_largura = self.largura_rio        # ← alvo para animação de largura
+        self.largura_speed = 1.0                      # ← velocidade de ajuste da largura
+
+        # centro do rio (já existente)
+        self.centro_rio_x = pyxel.width / 2
+        self.target_centro_x = self.centro_rio_x
+        self.curve_speed = 1.0
+
+        # histórico para “descer” curvas e larguras do topo
+        self.centros_hist = deque([self.centro_rio_x] * pyxel.height,
+                                  maxlen=pyxel.height)
+        self.largura_hist = deque([self.largura_rio] * pyxel.height,
+                                  maxlen=pyxel.height)       # ← novo
+
+        self.cor_borda = 15
         self.pontos_brancos = [(3, 2), (10, 5), (15, 8), (25, 3), (30, 7), 
                              (5, 14), (20, 12), (28, 16), (12, 20), (18, 18)]
-        
-        # Gerenciador de árvores (instância que controla a geração e desenho das árvores)
         self.tree_manager = TreeManager(self)
 
-    # Calcula as margens do rio na posição Y especificada
-    def obter_margens_rio(self, screen_y):  # Recebe uma coordenada vertical (y)
-        centro = self.centros_hist[screen_y]  # Obtém a posição horizontal do centro do rio naquela linha
-        meia = self.largura_rio / 2  # Calcula metade da largura do rio
-        return centro - meia, centro + meia  # Retorna posições esquerda e direita das margens
+    def obter_margens_rio(self, screen_y):
+        centro = self.centros_hist[screen_y]
+        largura = self.largura_hist[screen_y]           # ← histórico de largura
+        meia = largura / 2
+        return centro - meia, centro + meia
 
-    # Atualiza a posição do rio (chamado a cada frame)
     def update(self):
-        # Controles para curvar o rio (teclas 1 e 2 - apenas host pode controlar)
-        if (pyxel.btnp(pyxel.KEY_1) and self.is_host) or (pyxel.btnp(pyxel.KEY_1) and not self.is_host) :  # Tecla 1 pressionada pelo host ou pelo singleplayer
-            self.target_centro_x = min(self.target_centro_x + 30, pyxel.width - self.largura_rio/2)  # Limita ao limite direito da tela
-        if (pyxel.btnp(pyxel.KEY_2) and self.is_host) or (pyxel.btnp(pyxel.KEY_2) and not self.is_host):  # Tecla 2 pressionada pelo host ou pelo singleplayer
-            self.target_centro_x = max(self.target_centro_x - 30, self.largura_rio/2)  # Limita ao limite esquerdo da tela
+        # —–– curvar (1/2)
+        if pyxel.btnp(pyxel.KEY_1):
+            self.target_centro_x = min(self.target_centro_x + 30,
+                                       pyxel.width - self.largura_rio/2)
+        if pyxel.btnp(pyxel.KEY_2):
+            self.target_centro_x = max(self.target_centro_x - 30,
+                                       self.largura_rio/2)
 
-
-
-        # Animação suave do rio (interpolação para movimento fluido)
-        diff = self.target_centro_x - self.centro_rio_x  # Diferença entre alvo e posição atual
-        if abs(diff) > self.curve_speed:  # Se a diferença for maior que a velocidade de ajuste
-            self.centro_rio_x += self.curve_speed * (1 if diff > 0 else -1)  # Move gradualmente
+        # —–– ajustar centro suavemente
+        diff_c = self.target_centro_x - self.centro_rio_x
+        if abs(diff_c) > self.curve_speed:
+            self.centro_rio_x += self.curve_speed * (1 if diff_c > 0 else -1)
         else:
-            self.centro_rio_x = self.target_centro_x  # Chegou no alvo
+            self.centro_rio_x = self.target_centro_x
 
-        # Atualiza histórico de posições (para desenho consistente)
-        self.centros_hist.appendleft(self.centro_rio_x)  # Adiciona nova posição no início
-        self.deslocamento += self.velocidade_scroll  # Incrementa deslocamento vertical
+        # —–– largura (3/4)
+        if pyxel.btnp(pyxel.KEY_3):
+            # aumenta até um máximo (por ex. metade da largura da tela)
+            self.target_largura = min(self.target_largura + 10,
+                                      pyxel.width - 15)
+            
+        if pyxel.btnp(pyxel.KEY_4):
+            # diminui até um mínimo (por ex. 20 px)
+            self.target_largura = max(self.target_largura - 10, 20)
 
-        # Atualiza árvores (chama o gerenciador para mover as árvores)
+
+        diff_l = self.target_largura - self.largura_rio
+        if abs(diff_l) > self.largura_speed:
+            self.largura_rio += self.largura_speed * (1 if diff_l > 0 else -1)
+        else:
+            self.largura_rio = self.target_largura
+
+        # —–– atualizar históricos
+        self.centros_hist.appendleft(self.centro_rio_x)
+        self.largura_hist.appendleft(self.largura_rio)   # ← novo
+        self.deslocamento += self.velocidade_scroll
+
+        # atualiza árvores
         self.tree_manager.update_arvores(self.velocidade_scroll)
 
-    # Desenha o rio e suas margens (chamado a cada frame)
     def draw(self):
-        pyxel.rect(0, 0, pyxel.width, pyxel.height, 9)  # Preenche toda tela com azul (água)
-        
-        # Desenha margens do rio linha por linha
-        for screen_y in range(pyxel.height):  # Itera por cada linha vertical da tela
-            esq, dir = self.obter_margens_rio(screen_y)  # Obtém posições das margens
-            
-            # Bordas das margens (efeito de profundidade com 4 linhas)
-            for i in range(4):  # Desenha linhas de contorno
-                pyxel.line(int(esq)-i, screen_y, int(esq), screen_y, self.cor_borda)  # Margem esquerda
-                pyxel.line(int(dir), screen_y, int(dir)+i, screen_y, self.cor_borda)  # Margem direita
-            
-            # Água do rio (linha central entre as margens)
-            pyxel.line(int(esq), screen_y, int(dir), screen_y, 12)  # Azul mais claro
-            
-            # Detalhes visuais (pontos brancos que simulam reflexos/ondas)
-            for dx, dy in self.pontos_brancos:  # Para cada ponto no padrão definido
-                pattern_y = (screen_y - self.deslocamento + dy) % 24  # Calcula posição com deslocamento
-                if pattern_y == dy:  # Se estiver na posição correta do padrão
-                    x = esq + (dx % (dir - esq))  # Calcula posição horizontal dentro do rio
-                    if esq < x < dir:  # Verifica se está dentro das margens
-                        pyxel.pset(int(x), screen_y, 7)  # Desenha ponto branco
-        
-        # Desenha árvores (delega para o gerenciador de árvores)
+        pyxel.rect(0, 0, pyxel.width, pyxel.height, 9)
+        for screen_y in range(pyxel.height):
+            esq, dir = self.obter_margens_rio(screen_y)
+            # bordas
+            for i in range(4):
+                pyxel.line(int(esq)-i, screen_y, int(esq), screen_y,
+                           self.cor_borda)
+                pyxel.line(int(dir), screen_y, int(dir)+i, screen_y,
+                           self.cor_borda)
+            # água
+            pyxel.line(int(esq), screen_y, int(dir), screen_y, 12)
+            # reflexos
+            for dx, dy in self.pontos_brancos:
+                pattern_y = (screen_y - self.deslocamento + dy) % 24
+                if pattern_y == dy:
+                    largura_atual = dir - esq
+                    if largura_atual > 0:
+                        x = esq + (dx % largura_atual)
+                    if esq < x < dir:
+                        pyxel.pset(int(x), screen_y, 7)
         self.tree_manager.draw_arvores()

@@ -15,6 +15,9 @@ class Tree:
         self.width = 16   # Largura do sprite
         self.height = 16  # Altura do sprite
 
+        self.visible = True   # ← flag de visibilidade
+
+
     @property
     def hitbox(self):
         """Retorna a área de colisão da árvore (menor que o sprite visual)"""
@@ -110,43 +113,54 @@ class TreeManager:
                 return nova_arvore
 
     def reposicionar_arvore(self, arvore):
-        """Reposiciona árvore no topo da tela, fora do rio"""
-        while True: 
-            # Nova posição Y acima da tela
-            y = random.randint(-pyxel.height, 0)  
-            # Margens do rio no topo da tela
-            esq0, dir0 = self.background.obter_margens_rio(0)  
-
-            # Cria nova posição válida
+        """Tenta reposicionar até 5 vezes; se falhar, faz fallback na beira do rio."""
+        esq0, dir0 = self.background.obter_margens_rio(0)
+        # 1) tenta 5 vezes numa posição aleatória
+        for _ in range(5):
+            y = random.randint(-pyxel.height, 0)
             nova = self._novo_tree_fora(esq0, dir0, y)
             if self._arvore_valida(nova):
-                # Atualiza posição da árvore
-                arvore.x, arvore.y = nova.x, nova.y  
-                break
+                arvore.x, arvore.y = nova.x, nova.y
+                return
+
+        # 2) fallback: coloca à esquerda ou à direita, mas sempre fora do rio
+        y = random.randint(-pyxel.height, 0)
+        # distância extra para não grudar na margem
+        margem = self.distancia_rio + self.tree_w  
+        # se couber mais espaço à esquerda, usa ali; senão, na direita
+        if esq0 - margem >= self.margem_lateral:
+            arvore.x = int(esq0 - margem)
+        else:
+            arvore.x = int(dir0 + self.distancia_rio)
+        arvore.y = y
+
 
     def update_arvores(self, velocidade_scroll):
-        """Atualiza posição das árvores e verifica colisões com o rio"""
         for arvore in self.arvores:
-            # Move árvore para baixo (scroll do jogo)
-            arvore.y += velocidade_scroll  
+            arvore.y += velocidade_scroll
 
-            # Se saiu da parte inferior da tela
-            if arvore.y > pyxel.height:  
-                self.reposicionar_arvore(arvore)  # Reposiciona no topo
-
-            # Verifica se árvore está dentro do rio
-            screen_y = min(max(int(arvore.y), 0), pyxel.height - 1)  # Limita Y
-            esq, dir = self.background.obter_margens_rio(screen_y)  # Margens
-
-            # Reposiciona até ficar fora do rio
-            while esq < arvore.x < dir:
+            # se saiu de baixo, reposiciona
+            if arvore.y > pyxel.height:
                 self.reposicionar_arvore(arvore)
-                screen_y = min(max(int(arvore.y), 0), pyxel.height - 1)
-                esq, dir = self.background.obter_margens_rio(screen_y)
+                continue
+
+            # se entrou no rio, reposiciona só uma vez
+            screen_y = min(max(int(arvore.y), 0), pyxel.height - 1)
+            esq, dir = self.background.obter_margens_rio(screen_y)
+            if esq < arvore.x < dir:
+                self.reposicionar_arvore(arvore)
+                
 
     def draw_arvores(self):
         """Desenha todas as árvores visíveis na tela"""
         for arvore in self.arvores:
+            if not arvore.visible:
+                continue
+
+            # abaixo a checagem extra: se por acaso ainda estiver no rio, pula
+            screen_y = min(max(int(arvore.y), 0), pyxel.height - 1)
+            esq, dir = self.background.obter_margens_rio(screen_y)
+            
             # Verifica se árvore está dentro da área visível
             if 0 <= arvore.y < pyxel.height:  
                 # Desenha sprite da árvore
