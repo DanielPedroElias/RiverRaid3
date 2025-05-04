@@ -71,3 +71,5 @@ HEART_GAP = 4           # Espaco entre os coracoes (em pixels)
 
 # Espacamentos gerais da interface (HUD)
 PADDING = 4             # Espaco padrao entre elementos/bordas (em pixels)
+
+GAME_AREA_HEIGHT = SCREEN_HEIGHT - HUD_HEIGHT

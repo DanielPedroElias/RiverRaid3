@@ -293,7 +293,8 @@ class TreeManager:
     def draw_arvores(self):
         """Desenha todas as árvores visíveis na tela"""
         for arvore in self.arvores:
-            if not arvore.visible:
+            # pula árvores invisíveis ou sob a HUD
+            if not arvore.visible or arvore.y >= GAME_AREA_HEIGHT:
                 continue
 
             # Escolhe o sprite baseado no tipo

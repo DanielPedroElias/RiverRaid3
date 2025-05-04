@@ -211,7 +211,21 @@ class NetworkManager:
                 'lives': data['lives'],
                 'timestamp': time.time()
             }
-
+        elif packet_type == 'map':
+            packet = {
+                'type': 'map',
+                'seed':    data.get('seed'),
+                'rio_centro': data.get('rio_centro'),
+                'rio_largura':data.get('rio_largura'),
+                'arvores': data.get('arvores'),
+                'timestamp': time.time()
+            }
+        elif packet_type == 'player_status_update':
+             packet = {
+                'type': 'player_status_update',
+                'invincibility_timer': data.get('invincible_timer', 0),
+                'timestamp': time.time()
+             }
         
         # Envia o pacote
         self._send(packet)

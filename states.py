@@ -371,8 +371,20 @@ class HostGameState:
 
         # Se o usuario apertar "Enter", vai para o jogo normal e ativa o multiplayer (de forma assincrona)
         if pyxel.btnp(pyxel.KEY_RETURN):
-            self.game.network.send('game_start', {})
-            self.game.change_state(GameState(self.game, is_multiplayer=True))
+            game_state = GameState(self.game, is_multiplayer=True, is_host=True)
+
+            # Prepara dados iniciais para sincronização
+            initial_data = {
+                'seed': game_state.background.tree_manager.random_seed,  # Semente aleatória
+                'rio_centro': game_state.background.centro_rio_x,  # Posição do rio
+                'rio_largura': game_state.background.largura_rio  # Largura do rio
+            } 
+
+            # Envia dados para o cliente
+            self.game.network.send('game_start', initial_data)
+            
+            # Muda para o estado de jogo
+            self.game.change_state(game_state)
         
         # Se o usuario apertar "Esc", volta para a tela de menu do multiplayer
         if pyxel.btnp(pyxel.KEY_ESCAPE):
@@ -560,6 +572,7 @@ class GameState:
 
             # dados da HUD
             self.send_data('hud', {
+                'player_type': 'host' if self.is_host else 'client',
                 'fuel': self.current_fuel,
                 'lives': self.current_lives
             })
@@ -573,8 +586,8 @@ class GameState:
             })
 
             # Invencibilidade
-            self.send_data('status_player', {
-                'invincible': self.invincible_timer_j1 if self.is_host else self.invincible_timer_j2,  # Timer de invencibilidade
+            self.send_data('player_status_update', {
+                'invincibility_timer': self.invincible_timer_j1 if self.is_host else self.invincible_timer_j2,  # Timer de invencibilidade
             })
             
 
@@ -713,7 +726,19 @@ class GameState:
             
             elif type == 'hud': # Elementos da HUD do segundo jogador (gasolina e qtd de vidas)
                 # atualiza HUD do jogador remoto
+                player_type = pkt.get('player_type')
+
                 # Caso algum campo falhe (pacote corrompido), mantem o valor anterior como padrao
+                # Host recebe dados do cliente → atualiza Jogador 2
+                if self.is_host and player_type == 'client':
+                    self.current_fuel_p2 = pkt.get('fuel', self.current_fuel_p2)
+                    self.current_lives_p2 = pkt.get('lives', self.current_lives_p2)
+                # Cliente recebe dados do host → atualiza Jogador 1
+                elif not self.is_host and player_type == 'host':
+                    self.current_fuel = pkt.get('fuel', self.current_fuel)
+                    self.current_lives = pkt.get('lives', self.current_lives)
+
+                
                 self.current_fuel_p2 = pkt.get('fuel', self.current_fuel_p2)
                 self.current_lives_p2 = pkt.get('lives', self.current_lives_p2)
 
@@ -724,16 +749,17 @@ class GameState:
                     self.background.largura_rio = pkt.get('rio_largura', self.background.largura_rio)
                     self.background.target_largura = pkt.get('rio_largura', self.background.target_largura)
                     
-                    # Sincroniza árvores
-                    if 'arvores' in pkt:
-                        self.background.tree_manager.set_tree_states(pkt['arvores'])
+                # Sincroniza árvores
+                if 'arvores' in pkt:
+                    self.background.tree_manager.set_tree_states(pkt['arvores'])
+
                 if 'seed' in pkt and pkt['seed'] != self.background.tree_manager.random_seed:
                     random.seed(pkt['seed'])
                     self.background.tree_manager.random_seed = pkt['seed']
                     self.background.tree_manager.reset_arvores()
 
-            elif type == 'status_player':
-                inv = pkt.get('invincible', 0)
+            elif type == 'player_status_update':
+                inv = pkt.get('invincibility_timer', 0)
                 if self.is_host:
                     # host atualiza invencibilidade do cliente
                     self.invincible_timer_j2 = inv
@@ -750,6 +776,8 @@ class GameState:
     def draw(self):
         # Limpa a tela
         pyxel.cls(COLOR_BG)
+
+        self.background.draw()
 
         # Desenha tiros locais
         for b in self.bullets:
@@ -1008,8 +1036,10 @@ class Background:
        
 
     def draw(self):
-        pyxel.rect(0, 0, pyxel.width, pyxel.height, 9)
-        for screen_y in range(pyxel.height):
+        # pinta só até a linha da HUD
+        pyxel.clip(0, 0, pyxel.width, GAME_AREA_HEIGHT)
+        pyxel.rect(0, 0, pyxel.width, GAME_AREA_HEIGHT, 9)
+        for screen_y in range(GAME_AREA_HEIGHT):
             esq, dir = self.obter_margens_rio(screen_y)
             # bordas
             for i in range(4):
@@ -1029,4 +1059,6 @@ class Background:
                     if esq < x < dir:
                         pyxel.pset(int(x), screen_y, 7)
         
+        # desenha só árvores acima da HUD
         self.tree_manager.draw_arvores()
+        pyxel.clip()
