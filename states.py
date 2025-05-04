@@ -476,14 +476,14 @@ class GameState:
         # Posicionamento inicial dos jogadores (host vs cliente)
         if is_host:
             # Host controla jogador 1 (esquerda)
-            self.player_x, self.player_y = 59, 104  
+            self.player_x, self.player_y = 59, 144  
             # Jogador 2 (cliente) começa à direita
-            self.player2_x, self.player2_y = 79, 104  
+            self.player2_x, self.player2_y = 79, 144  
         else:
             # Cliente controla jogador 2 (direita)
-            self.player_x, self.player_y = 79, 104  
+            self.player_x, self.player_y = 79, 144  
             # Jogador 1 (host) começa à esquerda
-            self.player2_x, self.player2_y = 59, 104  
+            self.player2_x, self.player2_y = 59, 144  
 
         # Inicializa o cenário de fundo
         self.background = Background(is_host=is_host , is_multiplayer=is_multiplayer) 
@@ -639,7 +639,7 @@ class GameState:
                     # Atualiza a posição central atual do rio no background
                     self.background.target_centro_x = data['rio_centro']
                     # Atualiza também a posição alvo (target) do rio para sincronizar a animação
-                
+                 
                 if not self.is_host and 'rio_largura' in data:
                     self.background.largura_rio    = data['rio_largura']
                     self.background.target_largura = data['rio_largura']
@@ -728,7 +728,10 @@ class GameState:
         # # Debug: hitbox das árvores
         # for arvore in self.background.tree_manager.arvores:    # Itera por todas as árvores
         #     arv_left, arv_top, arv_right, arv_bottom = arvore.hitbox  # Obtém coordenadas da hitbox
-        #     pyxel.rectb(arv_left, arv_top, arv_right - arv_left, arv_bottom - arv_top, 8)  # Desenha retângulo da hitbox (para debug)
+        #     pyxel.rectb(arv_left, arv_top, arv_right - arv_left, arv_bottom - arv_top, 8)  # Desenha retângulo da hitbox
+        
+        # # Debug: hitbox do jogador 1
+        pyxel.rectb(self.player_x, self.player_y, PLAYER_WIDTH, PLAYER_HEIGHT, 8)  # Desenha retângulo da hitbox do jogador 1
 
 # Classe que gerencia o cenário do jogo (rio e margens)
 from collections import deque
@@ -746,12 +749,12 @@ class Background:
         # largura do rio (agora animável)
         self.largura_rio = 45
         self.target_largura = self.largura_rio        # ← alvo para animação de largura
-        self.largura_speed = 1.0                      # ← velocidade de ajuste da largura
+        self.largura_speed = .5                      # ← velocidade de ajuste da largura
 
         # centro do rio (já existente)
         self.centro_rio_x = pyxel.width / 2
         self.target_centro_x = self.centro_rio_x
-        self.curve_speed = 1.0
+        self.curve_speed = .5
 
         # histórico para “descer” curvas e larguras do topo
         self.centros_hist = deque([self.centro_rio_x] * pyxel.height,
@@ -763,6 +766,11 @@ class Background:
         self.pontos_brancos = [(3, 2), (10, 5), (15, 8), (25, 3), (30, 7), 
                              (5, 14), (20, 12), (28, 16), (12, 20), (18, 18)]
         self.tree_manager = TreeManager(self)
+
+
+        # Novo estado para controle da animação
+        self.animating_to_center = False
+        self.max_largura = pyxel.width - 30  # Largura máxima igual ao KEY_3
 
         
 
@@ -795,14 +803,34 @@ class Background:
             if pyxel.btnp(pyxel.KEY_3):
                 # aumenta até um máximo (por ex. metade da largura da tela)
                 self.target_largura = min(self.target_largura + 10,
-                                        pyxel.width - 15)
+                                        self.max_largura)
                 
             if pyxel.btnp(pyxel.KEY_4):
                 # diminui até um mínimo (por ex. 20 px)
                 self.target_largura = max(self.target_largura - 10, 20)
 
+            # Novo controle KEY_5
+            if pyxel.btnp(pyxel.KEY_5):
+                self.animating_to_center = True
+                self.target_centro_x = pyxel.width / 2  # Primeiro centraliza
+                self.target_largura = 45  # Reset para largura inicial
+
             # atualiza árvores
             self.tree_manager.update_arvores(self.velocidade_scroll)
+        
+        # Lógica da animação automática
+        if self.animating_to_center:
+            # Verifica se já centralizou
+            if abs(self.centro_rio_x - pyxel.width/2) < 1:
+                # Começa a expandir após centralizar
+                self.target_largura = self.max_largura
+                
+                # Desativa a animação quando chegar na largura máxima
+                if abs(self.largura_rio - self.max_largura) < 1:
+                    self.animating_to_center = False
+            else:
+                # Mantém largura pequena durante a centralização
+                self.target_largura = 45
 
         diff_l = self.target_largura - self.largura_rio
         if abs(diff_l) > self.largura_speed:

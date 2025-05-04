@@ -46,7 +46,7 @@ class TreeManager:
         # Margem lateral da tela onde árvores podem aparecer
         self.margem_lateral = 2  
         # Número máximo de árvores no jogo
-        self.max_arvores = 40  
+        self.max_arvores = 20  
         # Largura do sprite da árvore
         self.tree_w = 16  
         # Lista de árvores ativas
