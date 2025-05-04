@@ -16,7 +16,9 @@ class Tree:
         self.height = 16  # Altura do sprite
 
         self.visible = True   # ← flag de visibilidade
-
+        
+    def to_dict(self):
+        return {'x': self.x, 'y': self.y, 'visible': self.visible}
 
     @property
     def hitbox(self):
@@ -48,7 +50,18 @@ class TreeManager:
         # Seed aleatória para geração consistente
         self.random_seed = random.randint(0, 1000000)  
         random.seed(self.random_seed)  # Define a seed para o random
+    
+    def get_tree_states(self):
+        return [tree.to_dict() for tree in self.arvores]
 
+    def set_tree_states(self, tree_states):
+        self.arvores = []
+        for state in tree_states:
+            tree = Tree(state['x'], state['y'])
+            tree.visible = state['visible']
+            self.arvores.append(tree)
+
+            
     def reset_arvores(self):
         """Reinicia todas as árvores usando a mesma seed aleatória"""
         random.seed(self.random_seed)

@@ -8,7 +8,7 @@ FULLSCREAM = False          # Define se o jogo vai comecar ou nao em tela cheia
 
 # Rede
 NETWORK_PORT = 5555         # Porta padrao para conexao
-MAX_PACKET_SIZE = 1024      # Tamanho maximo dos dados por pacote (em bytes)
+MAX_PACKET_SIZE = 4096        # Tamanho maximo dos dados por pacote (em bytes)
 TIMEOUT = 3                 # Tempo (em segundos) para dar um Timeout no cliente ou no host, caso a conexao seja perdida
 RECONNECT_INTERVAL = 1.0    # Intervalo (em segundos) entre tentativas de reconexao do cliente, caso o host caia
 MAX_IP_LENGTH = 15          # Tamanho maximo para um IP

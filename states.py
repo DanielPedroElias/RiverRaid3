@@ -511,6 +511,9 @@ class GameState:
             self.background.largura_rio     = initial_rio_largura
             self.background.target_largura  = initial_rio_largura
 
+        if not is_host:  # Clientes não atualizam árvores
+            self.background.tree_manager.update_arvores = lambda _: None
+
     # Método para atualizar o estado do jogo a cada frame
     def update(self):
         self.background.update()  # Atualiza o cenário
@@ -595,7 +598,8 @@ class GameState:
                 'rio_largura': self.background.largura_rio,       # ← NOVO
                 'seed': self.background.tree_manager.random_seed,  # Seed aleatória
                 'invincible': self.invincible_timer_j1 if self.is_host else self.invincible_timer_j2,  # Timer de invencibilidade
-                'type': 'game_update'  # Tipo de mensagem
+                'type': 'game_update', # Tipo de mensagem
+                'arvores': self.background.tree_manager.get_tree_states()  # Adicione esta linha
             }
             self.game.network.send(data)  # Envia os dados
 
@@ -649,7 +653,9 @@ class GameState:
                     # Define a seed global do módulo random para manter consistência
                     self.background.tree_manager.reset_arvores()
                     # Reinicia as árvores com a nova seed para sincronizar a geração aleatória
-                    
+                # Sincroniza árvores
+                if 'arvores' in data and not self.is_host:
+                    self.background.tree_manager.set_tree_states(data['arvores'])
             except (KeyError, TypeError):
                 # Captura exceções caso haja erro ao acessar chaves do dicionário ou tipos incorretos
                 print("Erro na sincronização dos dados")
@@ -764,31 +770,36 @@ class Background:
         return centro - meia, centro + meia
 
     def update(self):
-        # —–– curvar (1/2)
-        if pyxel.btnp(pyxel.KEY_1):
-            self.target_centro_x = min(self.target_centro_x + 30,
-                                       pyxel.width - self.largura_rio/2)
-        if pyxel.btnp(pyxel.KEY_2):
-            self.target_centro_x = max(self.target_centro_x - 30,
-                                       self.largura_rio/2)
+        
+        
+        if self.is_host:
+            # —–– curvar (1/2)
+            if pyxel.btnp(pyxel.KEY_1):
+                self.target_centro_x = min(self.target_centro_x + 30,
+                                        pyxel.width - self.largura_rio/2)
+            if pyxel.btnp(pyxel.KEY_2):
+                self.target_centro_x = max(self.target_centro_x - 30,
+                                        self.largura_rio/2)
 
-        # —–– ajustar centro suavemente
-        diff_c = self.target_centro_x - self.centro_rio_x
-        if abs(diff_c) > self.curve_speed:
-            self.centro_rio_x += self.curve_speed * (1 if diff_c > 0 else -1)
-        else:
-            self.centro_rio_x = self.target_centro_x
+            # —–– ajustar centro suavemente
+            diff_c = self.target_centro_x - self.centro_rio_x
+            if abs(diff_c) > self.curve_speed:
+                self.centro_rio_x += self.curve_speed * (1 if diff_c > 0 else -1)
+            else:
+                self.centro_rio_x = self.target_centro_x
 
-        # —–– largura (3/4)
-        if pyxel.btnp(pyxel.KEY_3):
-            # aumenta até um máximo (por ex. metade da largura da tela)
-            self.target_largura = min(self.target_largura + 10,
-                                      pyxel.width - 15)
-            
-        if pyxel.btnp(pyxel.KEY_4):
-            # diminui até um mínimo (por ex. 20 px)
-            self.target_largura = max(self.target_largura - 10, 20)
+            # —–– largura (3/4)
+            if pyxel.btnp(pyxel.KEY_3):
+                # aumenta até um máximo (por ex. metade da largura da tela)
+                self.target_largura = min(self.target_largura + 10,
+                                        pyxel.width - 15)
+                
+            if pyxel.btnp(pyxel.KEY_4):
+                # diminui até um mínimo (por ex. 20 px)
+                self.target_largura = max(self.target_largura - 10, 20)
 
+            # atualiza árvores
+            self.tree_manager.update_arvores(self.velocidade_scroll)
 
         diff_l = self.target_largura - self.largura_rio
         if abs(diff_l) > self.largura_speed:
@@ -799,10 +810,11 @@ class Background:
         # —–– atualizar históricos
         self.centros_hist.appendleft(self.centro_rio_x)
         self.largura_hist.appendleft(self.largura_rio)   # ← novo
+        
+        
         self.deslocamento += self.velocidade_scroll
 
-        # atualiza árvores
-        self.tree_manager.update_arvores(self.velocidade_scroll)
+       
 
     def draw(self):
         pyxel.rect(0, 0, pyxel.width, pyxel.height, 9)
