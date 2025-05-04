@@ -38,7 +38,9 @@ class Game:
                   quit_key=pyxel.KEY_NONE           # Define nenhuma tecla para fechar o jogo, pois o proprio codigo ja faz esse pedido (evita de fechar acidentalmente)
         )
         pyxel.fullscreen(self.is_fullscreen) # Define se o jogo vai abrir em tela cheia ou nao
+        pyxel.load("artes.pyxres")  
         pyxel.run(self.update, self.draw) # Inicializa o jogo
+
     
     # Troca o estado atual do jogo (menus, o proprio jogo, etc.)
     def change_state(self, new_state):
@@ -60,7 +62,6 @@ class Game:
         # Chama o metodo "draw" do estado atual em que o jogo estah (states.py)
         self.current_state.draw()
         
-
 
 # Executa o jogo
 Game()

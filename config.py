@@ -3,6 +3,7 @@
 # Tela
 SCREEN_WIDTH = 160      # Largura da janela
 SCREEN_HEIGHT = 180     # Altura da janela
+SCREEN_HEIGHT = 180     # Altura da janela
 FPS = 60                # Frames por segundo
 FULLSCREAM = False      # Define se o jogo vai comecar ou nao em tela cheia
      
