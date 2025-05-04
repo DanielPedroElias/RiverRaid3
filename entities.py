@@ -2,9 +2,9 @@
 ### - Definir classes de entidades (bala, inimigo, item, etc.)
 ### - Gerenciar logica de update() e draw() de cada entidade
 
+import time
 import pyxel
 from config import *
-import time
 import random         # Para geração de números aleatórios
 from collections import deque  # Para estrutura de dados eficiente
 
