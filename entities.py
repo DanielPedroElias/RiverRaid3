@@ -16,9 +16,15 @@ class Tree:
         self.height = 16  # Altura do sprite
 
         self.visible = True   # ← flag de visibilidade
-        
+        self.sprite_type = random.choice([0, 1])  # 0 = primeira árvore (0,0), 1 = segunda (16,0)
+
     def to_dict(self):
-        return {'x': self.x, 'y': self.y, 'visible': self.visible}
+        return {
+            'x': self.x, 
+            'y': self.y, 
+            'visible': self.visible,
+            'sprite_type': self.sprite_type  # ← Novo
+        }
 
     @property
     def hitbox(self):
@@ -59,6 +65,7 @@ class TreeManager:
         for state in tree_states:
             tree = Tree(state['x'], state['y'])
             tree.visible = state['visible']
+            tree.sprite_type = state['sprite_type']  # ← Novo
             self.arvores.append(tree)
 
             
@@ -164,24 +171,23 @@ class TreeManager:
                 self.reposicionar_arvore(arvore)
                 
 
+    # Modifique o draw_arvores para usar sprites diferentes:
     def draw_arvores(self):
         """Desenha todas as árvores visíveis na tela"""
         for arvore in self.arvores:
             if not arvore.visible:
                 continue
 
-            # abaixo a checagem extra: se por acaso ainda estiver no rio, pula
-            screen_y = min(max(int(arvore.y), 0), pyxel.height - 1)
-            esq, dir = self.background.obter_margens_rio(screen_y)
+            # Escolhe o sprite baseado no tipo
+            u = 0 if arvore.sprite_type == 0 else 16  # 0 ou 16 no eixo X
+            v = 0  # Mesma coordenada Y para ambos
             
-            # Verifica se árvore está dentro da área visível
-            if 0 <= arvore.y < pyxel.height:  
-                # Desenha sprite da árvore
-                pyxel.blt(arvore.x, arvore.y, 0,  # Posição e banco de imagens
-                          0, 0,  # Coordenadas do sprite na imagem
-                          self.tree_w, self.tree_w,  # Dimensões
-                          0)  # Cor transparente
-
+            pyxel.blt(
+                arvore.x, arvore.y, 0,
+                u, v,  # Coordenadas do sprite
+                self.tree_w, self.tree_w,
+                0
+            )
 
 def check_tree_collision(player_x, player_y, arvores, player_name):
     """Verifica colisões entre jogador e árvores"""

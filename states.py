@@ -486,7 +486,7 @@ class GameState:
             self.player2_x, self.player2_y = 59, 104  
 
         # Inicializa o cenário de fundo
-        self.background = Background(is_host=is_host)
+        self.background = Background(is_host=is_host , is_multiplayer=is_multiplayer) 
 
         # Sistema de vidas e invencibilidade
         self.vida_jogador1 = 3  # Vida do jogador 1 (host)
@@ -511,8 +511,8 @@ class GameState:
             self.background.largura_rio     = initial_rio_largura
             self.background.target_largura  = initial_rio_largura
 
-        if not is_host:  # Clientes não atualizam árvores
-            self.background.tree_manager.update_arvores = lambda _: None
+        if is_multiplayer and not is_host:  # Apenas clientes multiplayer não atualizam
+            self.background.tree_manager.update_arvores = lambda _: None  # Desabilita atualização de árvores para clientes
 
     # Método para atualizar o estado do jogo a cada frame
     def update(self):
@@ -725,18 +725,19 @@ class GameState:
         else:                                                  # Se não estiver conectado
             pyxel.text(10, 10, "Multiplayer - Desconectado", 0)  # Mostra status "Desconectado"
 
-        # Debug: hitbox das árvores
-        for arvore in self.background.tree_manager.arvores:    # Itera por todas as árvores
-            arv_left, arv_top, arv_right, arv_bottom = arvore.hitbox  # Obtém coordenadas da hitbox
-            pyxel.rectb(arv_left, arv_top, arv_right - arv_left, arv_bottom - arv_top, 8)  # Desenha retângulo da hitbox (para debug)
+        # # Debug: hitbox das árvores
+        # for arvore in self.background.tree_manager.arvores:    # Itera por todas as árvores
+        #     arv_left, arv_top, arv_right, arv_bottom = arvore.hitbox  # Obtém coordenadas da hitbox
+        #     pyxel.rectb(arv_left, arv_top, arv_right - arv_left, arv_bottom - arv_top, 8)  # Desenha retângulo da hitbox (para debug)
 
 # Classe que gerencia o cenário do jogo (rio e margens)
 from collections import deque
 import pyxel
 
 class Background:
-    def __init__(self, is_host=False):
+    def __init__(self, is_host=False , is_multiplayer=False):
         self.is_host = is_host
+        self.is_multiplayer = is_multiplayer
 
         # movimento vertical
         self.velocidade_scroll = 1
@@ -763,6 +764,8 @@ class Background:
                              (5, 14), (20, 12), (28, 16), (12, 20), (18, 18)]
         self.tree_manager = TreeManager(self)
 
+        
+
     def obter_margens_rio(self, screen_y):
         centro = self.centros_hist[screen_y]
         largura = self.largura_hist[screen_y]           # ← histórico de largura
@@ -772,7 +775,7 @@ class Background:
     def update(self):
         
         
-        if self.is_host:
+        if self.is_host or not self.is_multiplayer:
             # —–– curvar (1/2)
             if pyxel.btnp(pyxel.KEY_1):
                 self.target_centro_x = min(self.target_centro_x + 30,
@@ -837,4 +840,5 @@ class Background:
                         x = esq + (dx % largura_atual)
                     if esq < x < dir:
                         pyxel.pset(int(x), screen_y, 7)
+        
         self.tree_manager.draw_arvores()
