@@ -1,9 +1,12 @@
 # RiverRaid3
 Trabalho 1 de Redes de Computadores
 
+**Autores:**
+- [Daniel](https://github.com/DanielPedroElias)
+- [Gabriel](https://github.com/gabeneves)
+
 ## Biblioteca utilizada:
 Este projeto utiliza a biblioteca [Pyxel - GitHub](https://github.com/kitao/pyxel)
-
 
 ## Requisitos do Projeto
 - O jogo deve ser desenvolvido em **Python**.
@@ -32,3 +35,18 @@ O **WebSocket** é um protocolo que permite uma comunicação **contínua e bidi
 ## Jogo Escolhido
 
 O jogo será uma **inspiração no clássico *[River Raid](https://pt.wikipedia.org/wiki/River_Raid)***, adaptado para atender todos os requisitos mencionados.
+
+---
+
+## Decisões de Arquitetura
+
+### Concor­rência e Paralelismo
+
+- **Rede (I/O-bound)**  
+  Usamos **threading** para todo o código de envio/recepção UDP, pois chamadas de socket já liberam o GIL (conferir no link do "Global Interpreter Lock" destacado abaixo) e mantêm o loop do Pyxel fluido.  
+  Para mais detalhes: 
+  [Global Interpreter Lock](https://docs.python.org/3/glossary.html#term-global-interpreter-lock),
+  [threading — Higher-level threading interface](https://docs.python.org/2/library/threading.html)
+
+- **Geração Procedural de Mapa (CPU-bound)**  
+  Desacoplamos a lógica pesada de geração em outro processo via `multiprocessing`, garantindo paralelismo real e evitando que o GIL atrase o jogo.

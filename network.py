@@ -21,7 +21,7 @@ class NetworkManager:
         self.connected = False          # Indica se ha uma conexao ativa com outro jogador
         self.remote_addr = None         # Endereco do servidor remoto (no modo cliente)
         self.client_addr = None         # Endereco do cliente conectado (usado apenas no modo host)
-        self.data = None                # Ultimos dados recebidos
+        self.received_packets = []      # Fila de pacotes recebidos
 
         self.receive_thread = None      # Thread responsavel por escutar pacotes recebidos
         self.reconnect_thread = None    # Thread que tenta reconectar automaticamente se a conexao for perdida (no cliente)
@@ -130,7 +130,7 @@ class NetworkManager:
     def stop(self):
         self.running = False  # Sinaliza para as threads pararem
         self.connected = False # Marca como desconectado
-        self.data = None # Reseta os dados recebidos
+        self.received_packets.clear() # Reseta a fila de dados recebidos
 
         # Espera a thread de recepcao finalizar
         if self.receive_thread:
@@ -172,14 +172,49 @@ class NetworkManager:
             time.sleep(RECONNECT_INTERVAL)
 
     # Envia dados para outro jogador/servidor
-    def send(self, data):
-        # Se o socket estiver ativo e estiver conectado, envia os dados do jogo
-        if self.sock and self.connected:
-            self._send({
-                'type': 'game_data',        # Tipo do pacote
-                'payload': data,            # Conteudo a ser enviado
-                'timestamp': time.time()    # Marca o momento do envio
-            })
+    def send(self, packet_type: str, data: dict):
+        # So tenta enviar se o socket estiver pronto e conectado com algum jogador
+        if not (self.sock and self.connected):
+            return
+
+        # TODO: Adicionar os tipos de dados a serem enviados na rede aqui
+        # Monta o pacote de acordo com o tipo
+        if packet_type == 'moviment':
+            packet = {
+                'type': 'moviment',
+                'payload': data.get('payload'),
+                'timestamp': time.time()
+            }
+        elif packet_type == 'shot':
+            packet = {
+                'type': 'shot',
+                'x': data['x'],
+                'y': data['y'],
+                'timestamp': time.time()
+            }
+        elif packet_type == 'heartbeat':
+            packet = {
+                'type': 'heartbeat',
+                'payload': '',
+                'timestamp': time.time()
+            }
+        elif packet_type == 'game_start':
+            packet = {
+                'type': 'game_start',
+                'payload': '', # TODO: Colocar dados do tipo de aviao escolhido
+                'timestamp': time.time()
+            }
+        elif packet_type == 'hud':
+            packet = {
+                'type': 'hud',
+                'fuel': data['fuel'],
+                'lives': data['lives'],
+                'timestamp': time.time()
+            }
+
+        
+        # Envia o pacote
+        self._send(packet)
     
     # Metodo interno que empacota os dados em JSON e envia via UDP
     def _send(self, data):
@@ -209,6 +244,8 @@ class NetworkManager:
                 # Decodifica os dados JSON recebidos
                 packet = json.loads(data.decode('utf-8')) # Usa a codificacao de caracteres padrao (uft-8)
                 
+                self._add_packet_to_queue(packet)  # Adiciona na fila de pacotes recebido
+
                 # Se for um pacote inicial de conexao
                 if packet['type'] == 'handshake':
                     # Novo cliente pediu para conectar -> salva o endereco
@@ -220,15 +257,13 @@ class NetworkManager:
                     # Envia uma resposta de handshake (uma especie de 'ACK') para confirmar conexao com o cliente
                     self._send({'type': 'handshake'})
 
-                # Se for dados de jogo, vindo do cliente conectado
-                elif packet['type'] == 'game_data' and addr == self.client_addr:
-                    # Armazena os dados recebidos
-                    self.data = packet['payload']
+                # Se for outros tipos de dados, vindo do cliente conectado
+                else:
                     # Atualiza o tempo da ultima mensagem recebida
                     self.last_recv = time.time()
 
-                    # Se for um ping de heartbeat, responda de volta para manter a conexao ativa (evitar timeout)
-                    if isinstance(self.data, dict) and self.data.get('type') == 'heartbeat':
+                    # Se for um ping de heartbeat, responde de volta para manter a conexao ativa (evitar timeout)
+                    if isinstance(packet, dict) and packet.get('type') == 'heartbeat':
                         self._send({'type': 'heartbeat'})
 
             # Se passar do tempo limite, marca como desconectado
@@ -254,16 +289,18 @@ class NetworkManager:
                 # Decodifica os dados JSON recebidos
                 packet = json.loads(data.decode('utf-8')) # Usa a codificacao de caracteres padrao (uft-8)
                 
+                self._add_packet_to_queue(packet)  # Adiciona na fila de pacotes recebido
+
                 # Se for um pacote inicial de conexao do host (uma especie de 'ACK')
                 if packet['type'] == 'handshake':
                     self.connected = True # Marca como conectado
                     self.last_recv = time.time() # Atualiza o tempo da ultima mensagem recebida
 
                 # Se forem dados de jogo
-                elif packet['type'] == 'game_data':
-                    self.data = packet['payload'] # Guarda o dado recebido
+                else:
                     self.last_recv = time.time() # Atualiza o tempo da ultima mensagem recebida
                     self.connected = True # Marca como conectado
+                    
 
             # Se passar do tempo limite, marca como desconectado
             except socket.timeout:
@@ -277,3 +314,44 @@ class NetworkManager:
             # Para qualquer outro erro, printa ele no terminal
             except Exception as e:
                 print(f"Erro no cliente: {e}")
+    
+    # Metodo para gerenciar a fila. Adiciona pacotes na fila com prioridade e controla o overflow
+    def _add_packet_to_queue(self, packet):
+        # Remove pacote de menor prioridade se a fila estiver cheia
+        if len(self.received_packets) >= MAX_QUEUED_PACKETS:
+            # Encontra a menor prioridade atual na fila de pacotes recebidos
+            lowest_priority = max(
+                # Obtem a prioridade dos pacotes recebidos na fila (se nao tiver prioridade especificada, 
+                # assume que o pacote tem a menor prioridade possivel "999", por padrao)
+                NETWORK_PRIORITY.get(p['type'], 999)  
+                for p in self.received_packets # procura em todos os pacotes recebidos
+            )
+
+            # Remove o primeiro pacote com a menor prioridade
+            # "enumerate" retorna uma tupla com dois valores para cada elemento da lista:
+                # idx: O indice (posicao) do elemento (pacote) na lista (received_packets).
+                # p: O proprio elemento (o pacote).
+            for idx, p in enumerate(self.received_packets):
+                # Se a prioridade do pacote na lista for a menor prioridade encontrada
+                if NETWORK_PRIORITY.get(p['type'], 999) == lowest_priority:
+                    self.received_packets.pop(idx) # Remove ele da lista (pop)
+                    break # Sai do loop
+        
+        # Insere o novo pacote na posicao correta baseado na prioridade 
+        # (assume que se o pacote nao tiver um nivel especificado, ele tem prioridade "999")
+        packet_priority = NETWORK_PRIORITY.get(packet.get('type'), 999) # Pega o nivel de prioridade do pacote recebido
+        insert_pos = 0 # Index que determina a nova posicao do novo pacote
+        while insert_pos < len(self.received_packets): # "insert_pos" vaid de 0 ateh o tamanho maximo de qtd de pacotes recebidos 
+            # Pega a prioridade do pacote atual no loop pela fila
+            current_prio = NETWORK_PRIORITY.get(
+                self.received_packets[insert_pos].get('type'), # Pega o pacote de acordo com o tipo
+                999 # Assume uma prioridade minima se o pacote nao for especificado na lista
+            )
+
+            # Se a prioridade do pacote atual no loop pela fila for menor do que o pacote a ser inserido
+            if packet_priority < current_prio:
+                break # Sai do loop
+            insert_pos += 1 # Se a prioridade do pacote for maior ou igual, pula para o proximo pacote na fila
+        
+        # Insere o novo pacote de acordo com a sua prioridade, deslocando os outros pacotes de menor prioridade para a direita
+        self.received_packets.insert(insert_pos, packet)
