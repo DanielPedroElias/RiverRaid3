@@ -339,37 +339,53 @@ class Boat:
 
 
 class BoatManager:
-    """Gerencia criação, atualização e reposicionamento de barcos dentro do rio."""
-    def __init__(self, background, max_boats=50, spawn_interval=30,):
+    """Gerencia criação, atualização e reposicionamento de barcos dentro do rio,
+       evitando que nasçam muito próximos uns dos outros."""
+    def __init__(self, background, max_boats=10, spawn_chance=0.02, min_spawn_distance=24):
         self.background = background
         self.max_boats = max_boats
-        self.spawn_interval = spawn_interval  # frames entre tentativas de spawn
-        self.timer = 0
+        self.spawn_chance = spawn_chance    # chance por pixel de scroll
+        self.min_spawn_distance = min_spawn_distance
         self.boats = []
+        self._last_deslocamento = background.deslocamento
+
+    def _can_spawn_at(self, x, y):
+        """Retorna False se existir outro barco muito perto de (x,y)."""
+        for b in self.boats:
+            # distancia horizontal e vertical
+            if abs(b.x - x) < self.min_spawn_distance and abs(b.y - y) < self.min_spawn_distance:
+                return False
+        return True
 
     def update(self):
-        # cria novos barcos se host e houver slot
+        # 1) move todos
+        for b in self.boats:
+            b.update()
+
         if self.background.is_host:
-            self.timer += 1
-            if self.timer >= self.spawn_interval and len(self.boats) < self.max_boats:
-                self.timer = 0
-                # spawn no topo, dentro das margens do rio
-                esq, dir = self.background.obter_margens_rio(0)
-                x = random.randint(int(esq), int(dir - 16))
-                self.boats.append(Boat(x, y=-16))
-        # atualiza posição de todos
-        for boat in self.boats:
-            boat.update()
-        # reposiciona/destrói barcos que saíram da tela
-        for boat in self.boats.copy():
-            if boat.y > pyxel.height:
-                # respawn como novo barco
-                if self.background.is_host:
-                    self.boats.remove(boat)
+        # 2) descarta os que saíram
+            self.boats = [b for b in self.boats if b.y <= pyxel.height]
+
+            # 3) spawn “por linha”, testando distância mínima
+            delta = int(self.background.deslocamento) - int(self._last_deslocamento)
+            for _ in range(delta):
+                if len(self.boats) < self.max_boats and random.random() < self.spawn_chance:
+                    esq, dir = self.background.obter_margens_rio(0)
+                    largura_disponivel = int(dir - esq - 16)
+                    if largura_disponivel > 0:
+                        # tente até N vezes encontrar um x válido
+                        for _ in range(5):
+                            x = random.randint(int(esq), int(dir - 16))
+                            y = -16
+                            if self._can_spawn_at(x, y):
+                                self.boats.append(Boat(x, y=y))
+                                break
+                            
+        self._last_deslocamento = self.background.deslocamento
 
     def draw(self):
-        for boat in self.boats:
-            boat.draw()
+        for b in self.boats:
+            b.draw()
 
     def get_states(self):
         return [b.to_dict() for b in self.boats]
