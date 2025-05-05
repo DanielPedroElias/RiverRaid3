@@ -574,7 +574,12 @@ class GameState:
         self.remote_boats = []                             # barcos sincronizados via rede
 
         # Bombas de gasolina (host gera; clientes sincronizam)
-        self.bomb_manager = GasolineBombManager(self.background)
+        # Bombas: host gera, precisa também do boat_manager pra checar barcos
+        from entities import GasolineBombManager
+        self.bomb_manager = GasolineBombManager(self.background,
+                                                self.boat_manager,
+                                                max_bombs=5,
+                                                spawn_interval_s=1)        
         self.remote_bombs = []
     
     # Método para atualizar o estado do jogo a cada frame

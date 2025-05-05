@@ -34,8 +34,9 @@ class Background:
                                   maxlen=pyxel.height)       # ← novo
 
         self.cor_borda = 15
-        self.pontos_brancos = [(3, 2), (10, 5), (15, 8), (25, 3), (30, 7), 
-                             (5, 14), (20, 12), (28, 16), (12, 20), (18, 18)]
+        
+        
+        
         self.tree_manager = TreeManager(self)
 
 
@@ -202,14 +203,6 @@ class Background:
                            self.cor_borda)
             # água
             pyxel.line(int(esq), screen_y, int(dir), screen_y, 12)
-            # reflexos
-            for dx, dy in self.pontos_brancos:
-                pattern_y = (screen_y - self.deslocamento + dy) % 24
-                if pattern_y == dy:
-                    largura_atual = dir - esq
-                    if largura_atual > 0:
-                        x = esq + (dx % largura_atual)
-                    if esq < x < dir:
-                        pyxel.pset(int(x), screen_y, 7)
+            
         
         self.tree_manager.draw_arvores()
