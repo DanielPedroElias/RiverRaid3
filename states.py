@@ -4,12 +4,9 @@
 ### - Transicoes entre telas
 
 # Bibliotecas
-import time
 import pyxel            # Engine do jogo
 from config import *    # Importa constantes e configuracoes do arquivo "config.py"
-from entities import *         # Importa entidades do jogo (tiro, inimigo, vida, etc.)
-from collections import deque
-import random
+from entities import *  # Importa as classes de entidades do jogo (jogador, arvores, etc.)
 
 # Classe para o Menu Principal do jogo
 class MenuState:
@@ -51,7 +48,7 @@ class MenuState:
         # Limpa a tela
         pyxel.cls(COLOR_BG)
         # Escreve o titulo do jogo
-        pyxel.text(50, 60, "River Raid 3", COLOR_TEXT)
+        pyxel.text(50, 40, "River Raid 3", COLOR_TEXT)
 
         # Marca a opcao em que o jogador esta selecionando no menu
         for i, opt in enumerate(self.options): # faz um looping pelas opcoes
@@ -65,7 +62,7 @@ class MenuState:
             #   - 1 opcao: (i = 0): 60 + (0*20) = 60
             #   - 2 opcao: (i = 1): 60 + (1*20) = 80
             # "opt" recebe o texto de cada opcao
-            pyxel.text(50, 90 + (i*20), opt, color)
+            pyxel.text(50, 60 + (i*20), opt, color)
 
 # Classe para o menu de multiplayer (escolhe entre host ou join game)
 class MultiplayerMenuState:
@@ -109,7 +106,7 @@ class MultiplayerMenuState:
         pyxel.cls(COLOR_BG)
         
         # Escreve "Multiplayer" na tela
-        pyxel.text(50, 60, "Multiplayer", COLOR_TEXT)
+        pyxel.text(50, 40, "Multiplayer", COLOR_TEXT)
 
         # Marca a opcao em que o jogador esta selecionando no menu
         for i, opt in enumerate(self.options): # faz um looping pelas opcoes
@@ -123,13 +120,13 @@ class MultiplayerMenuState:
             #   - 1 opcao: (i = 0): 60 + (0*20) = 60
             #   - 2 opcao: (i = 1): 60 + (1*20) = 80
             # "opt" recebe o texto de cada opcao
-            pyxel.text(50, 90 + (i*20), opt, color)
+            pyxel.text(50, 60 + (i*20), opt, color)
 
         # Escreve na tela "Pressione ESC para voltar"
-        pyxel.text(20, 150, "Pressione ESC para voltar", COLOR_TEXT)
+        pyxel.text(20, 100, "Pressione ESC para voltar", COLOR_TEXT)
 
-# Classe que tem o menu de Conexao com algum Host
-class ConnectState:
+# Classe que tem o menu de Conexao com algum Host SCREEN_HEIGHT
+class ConnectState: 
     # Construtor
     def __init__(self, game): # "game" eh passado no construtor da classe "Game" do "main.py", sendo a instancia do jogo
         self.game = game # Recebe a instancia do jogo
@@ -270,276 +267,250 @@ class ConnectState:
         # Limpa a tela
         pyxel.cls(COLOR_BG)
         # Imprime mensagem
-        pyxel.text(20, 30, "Conecte a um Host", COLOR_TEXT)
+        pyxel.text(20, 20, "Conecte a um Host", COLOR_TEXT)
         
         # Imprime o campo IP
-        pyxel.text(20, 60, "IP:", COLOR_TEXT)
+        pyxel.text(20, 40, "IP:", COLOR_TEXT)
         # Se o IP estiver selecionado, deixa ele marcado, caso contrario, deixa ele com a cor normal
         border_color = COLOR_TEXT_HIGHLIGHT if self.current_input == "ip" else COLOR_TEXT
-        pyxel.rectb(40, 60, 100, 8, border_color) # Desenha um retangulo apenas com a borda
-        pyxel.text(42, 62, self.ip_input, COLOR_TEXT) # Desenha o que o usuario ja digitou ateh o momento no IP
+        pyxel.rectb(40, 40, 100, 8, border_color) # Desenha um retangulo apenas com a borda
+        pyxel.text(42, 42, self.ip_input, COLOR_TEXT) # Desenha o que o usuario ja digitou ateh o momento no IP
         
         # Imprime o campo Porta
-        pyxel.text(20, 90, "Port:", COLOR_TEXT)
+        pyxel.text(20, 60, "Port:", COLOR_TEXT)
         # Se a Porta estiver selecionada, deixa ela marcada, caso contrario, deixa ela com a cor normal
         border_color = COLOR_TEXT_HIGHLIGHT if self.current_input == "port" else COLOR_TEXT
-        pyxel.rectb(40, 90, 50, 8, border_color) # Desenha um retangulo apenas com a borda
-        pyxel.text(42, 92, self.port_input, COLOR_TEXT) # Desenha o que o usuario ja digitou ateh o momento na Porta
+        pyxel.rectb(40, 60, 50, 8, border_color) # Desenha um retangulo apenas com a borda
+        pyxel.text(42, 62, self.port_input, COLOR_TEXT) # Desenha o que o usuario ja digitou ateh o momento na Porta
         
         # Mensagem de status
         if self.message_timer > 0: # Se o timer for maior do que zero, desenha a mensagem de sucesso/erro de conexao
             # Se estiver escrito "Sucesso" dentro da mensagem, coloca na cor para suceso
             # Caso contrario colocar a cor para falha
             color = COLOR_SUCCESS if "Sucesso" in self.message else COLOR_ERROR
-            pyxel.text(20, 120, self.message, color) # Desenha a mensagem na tela
+            pyxel.text(20, 80, self.message, color) # Desenha a mensagem na tela
         
         # Campos de ajuda de navegacao no menu
-        pyxel.text(10, 135, "TAB: Troca de Campo", COLOR_TEXT)
-        pyxel.text(10, 150, "ENTER: Connectar", COLOR_TEXT)
-        pyxel.text(10, 165, "ESC: Voltar", COLOR_TEXT)
+        pyxel.text(10, 90, "TAB: Troca de Campo", COLOR_TEXT)
+        pyxel.text(10, 100, "ENTER: Connectar", COLOR_TEXT)
+        pyxel.text(10, 110, "ESC: Voltar", COLOR_TEXT)
 
 # Classe que tem o submenu em que o cliente aguarda o host iniciar o jogo
 class WaitingForHostState:
-    # Construtor
-    def __init__(self, game):# "game" eh passado no construtor da classe "Game" do "main.py", sendo a instancia do jogo
-        self.game = game # Recebe a instancia do jogo
-        self.message = "Aguardando host iniciar o jogo..." # Mensagem que vai ser escrita nesse menu
-        self.waiting = True # Marca se o Host iniciou ou nao a partida
+    # Método de inicialização da classe
+    def __init__(self, game):
+        self.game = game  # Referência para o objeto principal do jogo
+        self.message = "Aguardando host iniciar o jogo..."  # Mensagem exibida ao usuário
+        self.waiting = True  # Flag indicando que está aguardando
 
-    # Verifica se o Host iniciou ou nao a partida
+    # Método chamado a cada frame para atualizar o estado
     def update(self):
-        # Processa TODOS os pacotes na fila
-        while self.game.network.received_packets:
-            pkt = self.game.network.received_packets.pop(0)
-            
-            # Verifica se o host enviou sinal para iniciar o jogo
-            # 1 - Se o host nao iniciou ainda, espera ele iniciar o jogo
-            if pkt.get('type') == 'game_start':
-                self.game.change_state(GameState(self.game, is_multiplayer=True))
-                return
-            
-            # 2 - Se vier um pacote de "moviment" (payload como lista), o host ja comecou o jogo antes do cliente entrar
-            elif pkt.get('type') == 'moviment':
-                self.game.change_state(GameState(self.game, is_multiplayer=True))
-                return
+        d = self.game.network.data  # Obtém dados recebidos da rede
+        
+        # Verifica se recebeu um sinal de início de jogo do host
+        if isinstance(d, dict) and d.get('type') == 'game_start':
+            # Muda para o estado de jogo com os parâmetros recebidos
+            self.game.change_state(GameState(
+                self.game,
+                is_multiplayer=True,
+                is_host=False,
+                initial_seed=d.get('seed'),
+                initial_rio_centro=d.get('rio_centro'),
+                initial_rio_largura=d.get('rio_largura')
+            ))
+            return
 
-        # Mantem a conexao ativa (envia heartbeat) para nao dar timeout
+        # Se estiver conectado, envia um sinal de "heartbeat" para manter a conexão
         if self.game.network.connected:
-            self.game.network.send('heartbeat', {})
+            self.game.network.send({'type': 'heartbeat'})
 
-        # Volta ao menu principal se o usuario apertar "Esc"
+        # Se pressionar ESC, cancela e volta ao menu
         if pyxel.btnp(pyxel.KEY_ESCAPE):
-            self.game.network.stop() # Fecha a conexao 
-            self.game.change_state(MenuState(self.game)) # Volta para o menu principal
+            self.game.network.stop()  # Encerra a conexão
+            self.game.change_state(MenuState(self.game))  # Volta ao menu principal
 
-    # Desenha informacoes para o usario na tela
+    # Método para desenhar a tela
     def draw(self):
-        # Limpa a tela
+        # Limpa a tela com a cor de fundo
         pyxel.cls(COLOR_BG)
         
-        # Escreve mensagens para o usuario para informar ele que o Host ainda nao iniciou o jogo
-        pyxel.text(20, 75, self.message, COLOR_TEXT)
-        pyxel.text(20, 105, "Pressione ESC para cancelar", COLOR_TEXT)
+        # Exibe mensagens para o usuário
+        pyxel.text(20, 50, self.message, COLOR_TEXT)  # Mensagem principal
+        pyxel.text(20, 70, "Pressione ESC para cancelar", COLOR_TEXT)  # Instrução
+
 
 # Classe que contem o submenu para 'Hostear' um jogo
 class HostGameState:
-    # Construtor
-    # Configura estado de hospedagem do jogo
-    def __init__(self, game): # "game" eh passado no construtor da classe "Game" do "main.py", sendo a instancia do jogo
-        self.game = game # Recebe a instancia do jogo
-        self.message = "" # Mensagem de sucesso/erro de conexao 
-        self.message_timer = 0 # Quanto tempo (frames) a mensagem de sucesso/erro de conexao ficara sendo exibida
+    # Método de inicialização
+    def __init__(self, game):
+        self.game = game  # Referência para o objeto principal do jogo
+        self.message = ""  # Mensagem de status
+        self.message_timer = 0  # Temporizador para mensagens
         
-        # Inicia host automaticamente
+        # Tenta iniciar o servidor host
         if self.game.network.start_host():
-            self.ip   = self.game.network.local_ip  # Pega o IP local
-            self.port = self.game.network.port      # Pega a Porta 
-        # Caso de algum erro ao inciar o host
+            # Se conseguir, obtém IP e porta
+            self.ip = self.game.network.local_ip
+            self.port = self.game.network.port
         else:
+            # Se falhar, mostra mensagem de erro
             self.ip = "—"
             self.port = "—"
             self.message = "Erro ao iniciar host"
-            self.message_timer = MESSAGE_DISPLAY_TIME
-    
+            self.message_timer = MESSAGE_DISPLAY_TIME  # Define tempo para mostrar mensagem
 
-        
-    # Controla inicio do jogo e saida do menu
+    # Método para atualizar o estado a cada frame
     def update(self):
-        # mantem cliente vivo (envia heartbeat) para evitar timeout
+        # Mantém a conexão ativa enviando heartbeats
         if self.game.network.connected:
-            self.game.network.send('heartbeat', {})
+            self.game.network.send({'type': 'heartbeat'})
 
-        # Se o usuario apertar "Enter", vai para o jogo normal e ativa o multiplayer (de forma assincrona)
+        # Se pressionar ENTER, inicia o jogo
         if pyxel.btnp(pyxel.KEY_RETURN):
+            # Cria o estado do jogo primeiro
             game_state = GameState(self.game, is_multiplayer=True, is_host=True)
-
+            
             # Prepara dados iniciais para sincronização
             initial_data = {
+                'type': 'game_start',
                 'seed': game_state.background.tree_manager.random_seed,  # Semente aleatória
                 'rio_centro': game_state.background.centro_rio_x,  # Posição do rio
                 'rio_largura': game_state.background.largura_rio  # Largura do rio
-            } 
 
+                
+            }
             # Envia dados para o cliente
-            self.game.network.send('game_start', initial_data)
+            self.game.network.send(initial_data)
             
             # Muda para o estado de jogo
             self.game.change_state(game_state)
-        
-        # Se o usuario apertar "Esc", volta para a tela de menu do multiplayer
+
+        # Se pressionar ESC, volta ao menu multiplayer
         if pyxel.btnp(pyxel.KEY_ESCAPE):
-            self.game.network.stop()  # Fecha a conexao
+            self.game.network.stop()  # Encerra a conexão
             self.game.change_state(MultiplayerMenuState(self.game))
 
-        # Atualiza timer da mensagem a cada frame ateh chegar em zero (nao vai mostrar mais)
+        # Atualiza temporizador da mensagem
         if self.message_timer > 0:
             self.message_timer -= 1
     
-    # Mostra informacoes do IP e Porta para outros jogadores poderem se conectar
+    # Método para desenhar a tela
     def draw(self):
         # Limpa a tela
         pyxel.cls(COLOR_BG)
-        # Imprime informacoes sobre o IP e a porta do usuario (para ele passar para outra pessoa conectar)
-        pyxel.text(20, 30, "Hosting Game", COLOR_TEXT)
-        pyxel.text(20, 60, f"IP: {self.ip}", COLOR_TEXT)
-        pyxel.text(20, 90, f"Port: {self.port}", COLOR_TEXT)
+        # Exibe informações do host
+        pyxel.text(20, 20, "Hosting Game", COLOR_TEXT)  # Título
+        pyxel.text(20, 40, f"IP: {self.ip}", COLOR_TEXT)  # Endereço IP
+        pyxel.text(20, 60, f"Port: {self.port}", COLOR_TEXT)  # Porta
 
-
-        # Mostra status da conexao
+        # Exibe status da conexão
         if self.game.network.connected:
-            pyxel.text(20, 120, "Cliente conectado", COLOR_SUCCESS)
-        # Se nao tiver nenhum cliente conectado
+            pyxel.text(20, 80, "Cliente conectado", COLOR_SUCCESS)  # Conectado
         else:
-            pyxel.text(20, 120, "Aguardando cliente...", COLOR_TEXT)
+            pyxel.text(20, 80, "Aguardando cliente...", COLOR_TEXT)  # Aguardando
 
-        # Mensagens de navegacao entre menus/jogo
-        pyxel.text(10, 135, "Pressione ENTER para comecar o jogo", COLOR_TEXT_HIGHLIGHT)
-        pyxel.text(10, 150, "Pressione ESC para voltar", COLOR_TEXT)
+        # Exibe instruções
+        pyxel.text(10, 90, "Pressione ENTER para comecar o jogo", COLOR_TEXT_HIGHLIGHT)
+        pyxel.text(10, 100, "Pressione ESC para voltar", COLOR_TEXT)
+
 
 # Classe para o menu de pause do jogo
 class PauseMenuState:
-    # Construtor
-    # Prepara o menu de pause
-    def __init__(self, game): # "game" eh passado no construtor da classe "Game" do "main.py", sendo a instancia do jogo
-        self.game = game # Recebe a instancia do jogo
-        self.selected = 0 # Recebe a posicao que o jogador vai selecionar ("Continuar", "Menu Principal"). Comeca com "Continuar"
-        self.options = ["Continuar", "Menu Principal"] # Opcoes do menu de pause
-    
-    # Gerencia escolha entre continuar o jogo ou voltar para o menu principal
+    # Método de inicialização
+    def __init__(self, game):
+        self.game = game  # Referência para o objeto principal do jogo
+        self.selected = 0  # Opção selecionada no menu (0 = Continuar, 1 = Menu Principal)
+        self.options = ["Continuar", "Menu Principal"]  # Opções do menu
+
+    # Método para atualizar o estado a cada frame
     def update(self):
-        # Mantem a rede ativa durante o pause (jogo continua funcionando) se estiver no modo online
+
+        # Mantém a atualização do cenário mesmo durante o pause
+        if isinstance(self.game.previous_state, GameState):
+            self.game.previous_state.background.update()  # ← Adicione esta linha
+
+        # Se estava em jogo multiplayer, mantém a rede ativa
         if isinstance(self.game.previous_state, GameState) and self.game.previous_state.is_multiplayer:
-            # TODO: Arruamar essa logica para se for o host, ele enviar todos os dados necessarios para o jogo funcionar, mesmo na tela de pause
-            # TODO: Se for o cliente, ele deve enviar todos os seus dados tamebm na tela de pause (ele pode tomar dano enquanto esta no pause)
-            self.game.previous_state.send_data('moviment', {'payload': [self.game.previous_state.player_x, self.game.previous_state.player_y]})  # Continua enviando dados
+            self.game.previous_state.send_data()  # Continua enviando dados
             self.game.previous_state.receive_data()  # Continua recebendo dados
-
-
-        # Navega entre as opcoes do menu de pause
-        if pyxel.btnp(pyxel.KEY_DOWN) or pyxel.btnp(pyxel.KEY_S) :
-            # Se estava na opcao 0: 0 + 1 = 1 -> 1 % 2 = 1 (segunda opcao)
-            # Se estava na opcao 1: 1 + 1 = 2 -> 2 % 2 = 0 (volta para a primeira opcao)
-            self.selected = (self.selected + 1) % 2 
+        # Atualiza os tiros mesmo em pause
+        if isinstance(self.game.previous_state, GameState):
+            self.game.previous_state.update_shots()
+        
+        # Navegação pelo menu com teclas DOWN/S ou UP/W
+        if pyxel.btnp(pyxel.KEY_DOWN) or pyxel.btnp(pyxel.KEY_S):
+            self.selected = (self.selected + 1) % 2  # Alterna entre opções
         elif pyxel.btnp(pyxel.KEY_UP) or pyxel.btnp(pyxel.KEY_W):
-            # Se estava na opcao 0: 0 - 1 = -1 -> -1 % 2 = 1 (segunda opcao) -> Resto de divisao negativa em python sempre retorna valor positivo
-            # Se estava na opcao 1: 1 - 1 = 0 -> 0 % 2 = 0 (primeira opcao)
-            self.selected = (self.selected - 1) % 2
+            self.selected = (self.selected - 1) % 2  # Alterna entre opções
             
-        # Se o usuario apertar "Enter" no menu de pause:
+        # Confirmação com ENTER
         if pyxel.btnp(pyxel.KEY_RETURN):
-            # Se tiver na primeira opcao "Continuar"
-            if self.selected == 0:
-                self.game.change_state(self.game.previous_state) # Continua o jogo
-            
-            # Se tiver na segunda opcao "Menu Principal"
-            else:
-                # Se o jogo estiver no modo Multiplayer, fecha a conexao
+            if self.selected == 0:  # Continuar
+                self.game.change_state(self.game.previous_state)  # Volta ao jogo
+            else:  # Menu Principal
+                # Se estava em multiplayer, encerra a conexão
                 if isinstance(self.game.previous_state, GameState) and self.game.previous_state.is_multiplayer:
-                    self.game.network.stop() # Fecha a conexao
-                
-                self.game.change_state(MenuState(self.game)) # Volta para o menu principal
+                    self.game.network.stop()
+                # Volta ao menu principal
+                self.game.change_state(MenuState(self.game))
         
-        # Se o usuario apertar "Esc" no menu de pause
+        # Se pressionar ESC, também volta ao jogo (atalho para Continuar)
         if pyxel.btnp(pyxel.KEY_ESCAPE):
-            self.game.change_state(self.game.previous_state) # Continua o jogo
+            self.game.change_state(self.game.previous_state)
     
-    # Mostra opcoes do menu de pause na tela
+    # Método para desenhar o menu
     def draw(self):
-        # Limpa a tela
-        pyxel.cls(COLOR_BG)
+        pyxel.cls(COLOR_BG)  # Limpa a tela
+        pyxel.text(50, 40, "Jogo Pausado", COLOR_TEXT)  # Título
 
-        # Escreve "Jogo Pausado" na tela
-        pyxel.text(50, 60, "Jogo Pausado", COLOR_TEXT)
-
-        # Marca a opcao em que o jogador esta selecionando no menu
-        for i, opt in enumerate(self.options): # faz um looping pelas opcoes
-            # "color" recebe:
-            #   - Se "i" nao for a opcao selecionada, coloca a cor normal de texto.
-            #   - Se "i" for a opcao selecionada, coloca uma cor de destaque nele
+        # Desenha as opções do menu
+        for i, opt in enumerate(self.options):
+            # Define a cor (destaque para opção selecionada)
             color = COLOR_TEXT if i != self.selected else COLOR_TEXT_HIGHLIGHT
+            pyxel.text(50, 60 + (i*20), opt, color)  # Desenha cada opção
 
-            # Pinta as opcoes do menu com as suas respectivas cores
-            # "i * 20" calcula a posicao em Y de cada opcao.
-            #   - 1 opcao: (i = 0): 60 + (0*20) = 60
-            #   - 2 opcao: (i = 1): 60 + (1*20) = 80
-            # "opt" recebe o texto de cada opcao
-            pyxel.text(50, 90 + (i*20), opt, color)
 
-# Classe que gerencia o jogo principal (todos os estados, players, comunicacao via rede, etc.)
+# Importa estrutura de dados deque
+from collections import deque
+
+# Classe principal que gerencia o estado do jogo (singleplayer/multiplayer)
 class GameState:
-    # Construtor
-    # Estado principal onde o jogo acontece
-    def __init__(self, game, is_multiplayer=False, is_host=False, initial_seed=None, initial_rio_centro=None , initial_rio_largura=None): # "game" eh passado no construtor da classe "Game" do "main.py", sendo a instancia do jogo
-        self.game = game # Recebe a instancia do jogo
-
-        # Multiplayer
-        self.is_multiplayer = is_multiplayer # Recebe se o jogo estah com multiplayer ativo ou nao
-        
-        # Flag para identificar se eh o host
+    # Método de inicialização
+    def __init__(self, game, is_multiplayer=False, is_host=False, initial_seed=None, initial_rio_centro=None , initial_rio_largura=None):
+        self.game = game  # Referência para o objeto principal do jogo
+        self.is_multiplayer = is_multiplayer  # Flag para modo multiplayer
         self.is_host = is_host  # Flag para identificar se é o host
 
-        # Posicoes dos jogadores
         # Posicionamento inicial dos jogadores (host vs cliente)
         if is_host:
             # Host controla jogador 1 (esquerda)
-            self.player_x, self.player_y = 59, 130  # Posicao inicial do jogador
+            self.player_x, self.player_y = 55, 144  
             # Jogador 2 (cliente) começa à direita
-            self.player2_x, self.player2_y = 79, 130  # Posicao inicial do segundo jogador
+            self.player2_x, self.player2_y = 90, 144  
         else:
             # Cliente controla jogador 2 (direita)
-            self.player_x, self.player_y = 79, 130   # Posicao inicial do jogador
+            self.player_x, self.player_y = 90, 144  
             # Jogador 1 (host) começa à esquerda
-            self.player2_x, self.player2_y = 59, 130  # Posicao inicial do segundo jogador
-
-        # Tiro
-        self.bullets = []          # Tiros locais
-        self.remote_bullets = []   # Tiros recebidos pela rede
-        self._last_shot = 0        # controla o cooldown
-
-        # HUD
-        # Valores (exemplo inicial)
-        self.current_fuel = MAX_FUEL
-        self.current_lives = MAX_LIVES
-        # Valores para o jogador 2 (jogador 2)
-        self.current_fuel_p2 = MAX_FUEL
-        self.current_lives_p2 = MAX_LIVES
+            self.player2_x, self.player2_y = 55, 144  
 
         # Inicializa o cenário de fundo
         self.background = Background(is_host=is_host , is_multiplayer=is_multiplayer) 
 
-        # Sistema de invencibilidade
+        # Sistema de vidas e invencibilidade
+        self.vida_jogador1 = 3  # Vida do jogador 1 (host)
+        self.vida_jogador2 = 3  # Vida do jogador 2 (cliente)
         self.invincible_timer_j1 = 0  # Temporizador de invencibilidade do jogador 1
         self.invincible_timer_j2 = 0  # Temporizador de invencibilidade do jogador 2
         self.INVINCIBILITY_DURATION = 90  # Duração em frames (1.5s a 60FPS)
 
         # Sincronização inicial do jogo (apenas multiplayer)
-        if initial_seed is not None:
+        if initial_seed:
             # Sincroniza a seed aleatória para árvores
             self.background.tree_manager.random_seed = initial_seed
             random.seed(initial_seed)
             self.background.tree_manager.reset_arvores()
         
-        if initial_rio_centro is not None and not is_host:
+        if initial_rio_centro and not is_host:
             # Sincroniza a posição do rio para clientes
             self.background.centro_rio_x = initial_rio_centro
             self.background.target_centro_x = initial_rio_centro
@@ -551,83 +522,63 @@ class GameState:
         if is_multiplayer and not is_host:  # Apenas clientes multiplayer não atualizam
             self.background.tree_manager.update_arvores = lambda _: None  # Desabilita atualização de árvores para clientes
 
-        # Controle do draw/update para a tela de pause:
-        # Esse atributo ajuda a forcar o pyxel a rodar o draw depois do update
-        # Evita que o jogo desenhe objetos em um estado "prematuro" antes do jogo atualizar a real posicao deles com o update
-        # Isso eh basicamente usado no momento que o jogo sai da tela de pause (problemas com a engine do Pyxel)        
-        self.last_update_frame = -1
+        # lista de tiros locais e da outra tela
+        self.shots = []          # tiros deste jogador
+        self.remote_shots = []   # tiros vindos pela rede
 
-    
-    # Gerencia a logica do jogo
-    def update(self):
-        self.background.update()  # Atualiza o cenário
+        self.explosions = []   # lista de Explosion ativos
+        self.remote_explosions = []  # explosões vindas pela rede
 
-        # Envia e recebe dados do jogo se estiver no modo Multiplayer
-        if self.is_multiplayer and self.game.network.connected:
-            # 'update()' rodou nesse frame
-            self.last_update_frame = pyxel.frame_count
-            
-            # Movimentacao
-            self.send_data('moviment', {'payload': [self.player_x, self.player_y]}) # Envia dados
+        self.boat_manager = BoatManager(self.background)    # barcos locais (host gera)
+        self.remote_boats = []                             # barcos sincronizados via rede
 
-            # dados da HUD
-            self.send_data('hud', {
-                'player_type': 'host' if self.is_host else 'client',
-                'fuel': self.current_fuel,
-                'lives': self.current_lives
-            })
-            
-            # mapa: seed, centro, largura do rio e arvores
-            self.send_data('map', {
-                'seed': self.background.tree_manager.random_seed,
-                'rio_centro': self.background.centro_rio_x,
-                'rio_largura': self.background.largura_rio,
-                'arvores': self.background.tree_manager.get_tree_states()  # Adicione esta linha
-            })
-
-            # Invencibilidade
-            self.send_data('player_status_update', {
-                'invincibility_timer': self.invincible_timer_j1 if self.is_host else self.invincible_timer_j2,  # Timer de invencibilidade
-            })
-            
-
-            # TODO: Arrumar o logica de recepcao de dados
-            self.receive_data()  # Atualiza dados do segundo jogador
-
-        # Logica de tiro:
-        # Dispara localmente respeitando cooldown
-        now = pyxel.frame_count / FPS # Pega o tempo atual (utilizando apenas o pyxel)
         
-        # Se jogador atirou (apertou "Espaco") e se o tempo do ultimo tiro dado for maior que o cooldown do aviao 
-        if pyxel.btn(pyxel.KEY_SPACE) and now - self._last_shot >= SHOT_COOLDOWN:
-            # Cria o tiro no centro do aviao
-            bx = self.player_x + PLAYER_WIDTH//2 - BULLET_WIDTH//2 # Posicao x do tiro = (posicao do jogador + (largura do jogador e do tiro) // 2)
-            by = self.player_y # Posicao y do tiro
-            b = Bullet(bx, by) # Cria o tiro local
-            self.bullets.append(b) # Adiciona o tiro local dado na lista de tiros do jogador 1
-            self._last_shot = now # Atualiza o tempo em que o tiro foi dado
 
-            if self.is_multiplayer and self.game.network.connected:
-                # Envia o evento de tiro imediatamente
-                self.send_data('shot', {'x': bx, 'y': by})
-
-        # Atualiza todos os tiros (locais e remotos)
-        for lst in (self.bullets, self.remote_bullets):
-            for bullet in lst:
-                bullet.update()
-
-        # Remove os tiros que sairam da tela (locais e remotos)
-        self.bullets = [tiro for tiro in self.bullets if tiro.alive]
-        self.remote_bullets = [tiro for tiro in self.remote_bullets if tiro.alive]
+    def _collide_player(self, hitbox, px, py):
+        left, top, right, bottom = hitbox
+        return (px+PLAYER_WIDTH>left and px<right and
+                py+PLAYER_HEIGHT>top and py<bottom)
+    
+    # Método para atualizar o estado do jogo a cada frame
+    def update(self):
+        ##self.background.update()  # Atualiza o cenário
 
 
+        # Apenas atualiza a lógica do jogo se não estiver em pause
+        if not isinstance(self.game.current_state, PauseMenuState):
+            self.background.update()  # ← Movido para fora da verificação de pause
 
-        # TODO: Implementar a atualizacao para elementos da HUD
-        # Dranagem do combustivel:
-        # Consome um pouco de combustivel a cada frame
-        consumption_per_frame = FUEL_CONSUMPTION_RATE / FPS # Calcula qtd de gasolina para consumir neste frame (unidades por frame)
-        self.current_fuel = max(0, self.current_fuel - consumption_per_frame) # Decrementa, garantindo que nunca fique negativo
+        # Comunicação em rede (apenas multiplayer)
+        if self.is_multiplayer:
+            self.send_data()  # Envia dados do jogador local
+            self.receive_data()  # Recebe dados do outro jogador
 
+        # Lógica de pausa
+        if pyxel.btnp(pyxel.KEY_ESCAPE):
+            self.game.previous_state = self  # Salva estado atual
+            self.game.change_state(PauseMenuState(self.game))  # Vai para menu de pause
+            return  # Sai da atualização
+
+        # Controles do jogador (WASD)
+        if not self.is_multiplayer or (self.is_multiplayer):
+            if pyxel.btn(pyxel.KEY_A):
+                self.player_x -= PLAYER_SPEED  # Move para esquerda
+            if pyxel.btn(pyxel.KEY_D):
+                self.player_x += PLAYER_SPEED  # Move para direita
+            if pyxel.btn(pyxel.KEY_W):
+                self.player_y -= PLAYER_SPEED  # Move para cima
+            if pyxel.btn(pyxel.KEY_S):
+                self.player_y += PLAYER_SPEED  # Move para baixo
+            # Disparo: cria um tiro quando apertar SPACE
+            if pyxel.btnp(pyxel.KEY_SPACE):
+                # inicia no centro horizontal do avião, um pouco acima dele
+                shot_x = self.player_x + PLAYER_WIDTH // 2 - 1
+                shot_y = self.player_y
+                self.shots.append(Shot(shot_x, shot_y))
+
+        # Limites da tela
+        self.player_x = max(0, min(self.player_x, SCREEN_WIDTH - PLAYER_WIDTH))
+        self.player_y = max(0, min(self.player_y, SCREEN_HEIGHT - PLAYER_HEIGHT))
 
         # Atualiza temporizadores de invencibilidade
         if self.invincible_timer_j1 > 0:
@@ -635,261 +586,33 @@ class GameState:
         if self.invincible_timer_j2 > 0:
             self.invincible_timer_j2 -= 1 # Invencibilidade do jogador 2
 
-        # Se o usuario apertar "Esc", pausa o jogo
-        if pyxel.btnp(pyxel.KEY_ESCAPE):
-            self.game.previous_state = self  # Guarda estado atual do jogo (passando a instancia)
-            self.game.change_state(PauseMenuState(self.game)) # Troca o estado para o menu de pause
-            return  # Sai da atualizacao
+        self.update_shots()
+        
+        # local
+        for exp in self.explosions:
+            exp.update()
+        self.explosions = [e for e in self.explosions if not e.is_dead()]
 
+        # remota
+        for exp in self.remote_explosions:
+            exp.update()
+        self.remote_explosions = [
+            e for e in self.remote_explosions if not e.is_dead()
+        ]
 
-        # Logica de movimentacao:
-        if pyxel.btn(pyxel.KEY_A):
-            self.player_x -= PLAYER_SPEED
-        if pyxel.btn(pyxel.KEY_D):
-            self.player_x += PLAYER_SPEED
-        if pyxel.btn(pyxel.KEY_W):
-            self.player_y -= PLAYER_SPEED
-        if pyxel.btn(pyxel.KEY_S):
-            self.player_y += PLAYER_SPEED
+        # atualiza barcos (host gera; ambos movem)
+        self.boat_manager.update()
+        # recebe remote_boats já populada em receive_data
+        for b in self.remote_boats:
+            b.update()
 
-        ## Trava o player dentro da tela
-        # TODO: Trocar 'PLAYER_WIDTH' e 'PLAYER_HEIGHT' pela altura e largura do player quando tiver uma pixel art dos avioes
-        # Player nao sai da tela no eixo X
-        # - min(self._player_x, self.largura_tela - PLAYER_WIDTH): impede que o jogador va alem do lado direito da tela
-        # - max(0, ...): impede que o jogador va alem do lado esquerdo da tela
-        # - PLAYER_WIDTH eh a largura do jogador (mudar depois)
-        self.player_x = max(0, min(self.player_x, SCREEN_WIDTH - PLAYER_WIDTH))
-
-        # Player nao sai da tela no eixo Y
-        # - min(self._player_y, self.altura_tela - PLAYER_HEIGHT): impede que o jogador va alem da parte inferior da tela
-        # - max(0, ...): impede que o jogador va alem da parte superior da tela
-        # - PLAYER_HEIGHT eh a altura do jogador (mudar depois)
-        game_area_height = SCREEN_HEIGHT - HUD_HEIGHT
-        self.player_y = max(0, min(self.player_y, game_area_height - PLAYER_HEIGHT))
-
+       
         # Verificação de colisões
         self.check_all_collisions()
-    
-    # Envia dados do jogador para a rede
-    def send_data(self, packet_type: str, data: dict):
-        # packet_type = nome do fluxo ('moviment','shot','life',...)
-        # data = os campos para cada tipo
-        
-        # Enviar dados se estiver em multiplayer e conectados (tanto host quanto cliente)
-        if self.is_multiplayer and self.game.network.connected:
-            self.game.network.send(packet_type, data)
-
-    # Processa dados recebidos da rede
-    def receive_data(self):
-        # Processa todos os pacotes na fila, ordenados por prioridade
-        while self.game.network.received_packets:
-            pkt = self.game.network.received_packets.pop(0)  # Remove o primeiro da fila (com maior prioridade)
-            
-            if not isinstance(pkt, dict):
-                continue  # Ignora pacotes invalidos
-            
-            type = pkt.get('type') # Recebe o tipo do pacote
-            # Verifica cada pacote de acordo com o tipo e atualiza os dados recebidos
-            if type == 'moviment': # Posicao do jogador 2
-                x, y = pkt['payload']
-                self.player2_x = x
-                self.player2_y = y
-
-            elif type == 'shot': # Tiro dado pelo jogador 2
-                # Posicoes do tiro
-                bx = pkt['x']
-                by = pkt['y']
-
-                # Extrai o momento exato em que o tiro foi dado (em segundos)
-                spawn_time = pkt['timestamp']
-
-                # Calcula a velocidade real do tiro em pixels/segundo:
-                # BULLET_SPEED estah em pixels/frame. Multiplicando por FPS (frames/segundo), resulta em => pixels/segundo
-                # O sinal negativo indica movimento para cima (eixo Y negativo)
-                speed_per_sec = -BULLET_SPEED * FPS # Velocidade real do tiro em pixels/segundo
-                
-                # Calcula quanto tempo se passou desde o tiro ateh agora (idade do tiro)
-                age = time.time() - spawn_time
-
-                # Calcula onde o tiro DEVERIA estar AGORA, considerando:
-                #   y_now = posicao_inicial + (velocidade * tempo_decorrido)
-                y_now = by + speed_per_sec * age
-
-                # Verifica se o tiro ja deveria ter saido da tela (posicao em 'Y' atual + altura < 0 (limite superior da tela))
-                if y_now + BULLET_HEIGHT < 0:
-                    continue # Ignora o tiro (nao adiciona ele na lista de tiros e nem cira a sua instancia)
-
-                # Cria uma nova instancia de tiro remoto
-                b = RemoteBullet(bx, by, spawn_time) 
-                # Adiciona a nova instancia na lista de tiros remotos para serem atualizados e desenhados (dentro do GameState)
-                self.remote_bullets.append(b)
-            
-            elif type == 'hud': # Elementos da HUD do segundo jogador (gasolina e qtd de vidas)
-                # atualiza HUD do jogador remoto
-                player_type = pkt.get('player_type')
-
-                # Caso algum campo falhe (pacote corrompido), mantem o valor anterior como padrao
-                # Host recebe dados do cliente → atualiza Jogador 2
-                if self.is_host and player_type == 'client':
-                    self.current_fuel_p2 = pkt.get('fuel', self.current_fuel_p2)
-                    self.current_lives_p2 = pkt.get('lives', self.current_lives_p2)
-                # Cliente recebe dados do host → atualiza Jogador 1
-                elif not self.is_host and player_type == 'host':
-                    self.current_fuel = pkt.get('fuel', self.current_fuel)
-                    self.current_lives = pkt.get('lives', self.current_lives)
-
-                
-                self.current_fuel_p2 = pkt.get('fuel', self.current_fuel_p2)
-                self.current_lives_p2 = pkt.get('lives', self.current_lives_p2)
-
-            elif type == 'map':
-                if not self.is_host:
-                    self.background.centro_rio_x = pkt.get('rio_centro', self.background.centro_rio_x)
-                    self.background.target_centro_x = pkt.get('rio_centro', self.background.target_centro_x)
-                    self.background.largura_rio = pkt.get('rio_largura', self.background.largura_rio)
-                    self.background.target_largura = pkt.get('rio_largura', self.background.target_largura)
-                    
-                # Sincroniza árvores
-                if 'arvores' in pkt:
-                    self.background.tree_manager.set_tree_states(pkt['arvores'])
-
-                if 'seed' in pkt and pkt['seed'] != self.background.tree_manager.random_seed:
-                    random.seed(pkt['seed'])
-                    self.background.tree_manager.random_seed = pkt['seed']
-                    self.background.tree_manager.reset_arvores()
-
-            elif type == 'player_status_update':
-                inv = pkt.get('invincibility_timer', 0)
-                if self.is_host:
-                    # host atualiza invencibilidade do cliente
-                    self.invincible_timer_j2 = inv
-                else:
-                    # cliente atualiza invencibilidade do host
-                    self.invincible_timer_j1 = inv
-
-            # Ignora heartbeat (a propria rede, no 'network.py' ja lida com isso)
-            elif type == 'heartbeat':
-                continue
-
-
-    # Renderiza mapa, jogadores e elementos do jogo
-    def draw(self):
-        # Limpa a tela
-        pyxel.cls(COLOR_BG)
-
-        self.background.draw()
-
-        # Desenha tiros locais
-        for b in self.bullets:
-            b.draw()
-
-        # Desenha tiros remotos
-        # So desenha remotos se 'update()' ja rodou este frame (evita problemas com a tela de pause)
-        if self.last_update_frame == pyxel.frame_count:
-            for b in self.remote_bullets:
-                b.draw()
-
-        # Desenha jogadores com invencibilidade piscante
-        j1 = (self.invincible_timer_j1//5)%2==0 if self.invincible_timer_j1>0 else True
-        j2 = (self.invincible_timer_j2//5)%2==0 if self.invincible_timer_j2>0 else True
-        if j1:
-            pyxel.rect(self.player_x, self.player_y, PLAYER_WIDTH, PLAYER_HEIGHT, COLOR_PLAYER)
-        if self.is_multiplayer and j2:
-            pyxel.rect(self.player2_x, self.player2_y, PLAYER_WIDTH, PLAYER_HEIGHT, COLOR_PLAYER2_GENERIC)
-
-        # Separador da HUD (linha que divide o jogo da interface)
-        sep_y = SCREEN_HEIGHT - HUD_HEIGHT # Posicao em 'Y' = Separador eh igual a altura da tela menos a altura da HUD
-        pyxel.line(0, sep_y, SCREEN_WIDTH, sep_y, COLOR_HUD_LINE) # Desenha a linha horizontal da hud
-
-        # Informacoes da hud Para o Multiplayer:
-        if self.is_multiplayer:
-            # Logica para as duas barras de combustivel (jogador 1 e 2):
-
-            # Calcula largura das barras: (largura_total - (3*padding)) / 2
-            # De forma que caiba duas barras + 3 *paddings (de espaco entre elas):
-            bar_w = (SCREEN_WIDTH - 3 * PADDING) // 2
-
-            # Posicoes X das duas barras:
-            x1 = PADDING # Barra esquerda
-            x2 = (PADDING * 2) + bar_w # Barra direita ((padding * 2) + largura da primeira barra)
-
-            # Posicao Y inicial das barras (2px abaixo do separador da HUD)
-            y_bar = sep_y + 2
-
-
-            # Barra de combustivel - Jogador 1
-            # desenha barra do jogador 1
-            pyxel.rectb(x1, y_bar, bar_w, FUEL_BAR_H, COLOR_FUEL_BORDER) # Desenha borda da barra
-            filled1 = int((self.current_fuel / MAX_FUEL) * (bar_w - 2)) # Calcula o nivel de preenchimento da barra
-            pyxel.rect(x1 + 1, y_bar + 1, filled1, FUEL_BAR_H - 2, COLOR_FUEL) # Preenche proporcionalmente a barra de gasolina
-
-            # Barra de combustivel - Jogador 2 
-            pyxel.rectb(x2, y_bar, bar_w, FUEL_BAR_H, COLOR_FUEL_BORDER) # Desenha borda da barra
-            filled2 = int((self.current_fuel_p2 / MAX_FUEL) * (bar_w - 2)) # Calcula o nivel de preenchimento da barra
-            pyxel.rect(x2 + 1, y_bar + 1, filled2, FUEL_BAR_H - 2, COLOR_FUEL) # Preenche proporcionalmente a barra de gasolina
-
-            # Coracoes (vidas) em baixo das barras de gasolina
-            y_heart = y_bar + FUEL_BAR_H + 2 # Posicao Y dos coracoes
-
-            # Coracao - Jogador 1
-            # Centraliza coracao abaixo da barra
-            total_heart_w = MAX_LIVES * HEART_SIZE + (MAX_LIVES - 1) * HEART_GAP # Largura total dos coracoes
-            start_x1 = x1 + (bar_w - total_heart_w) // 2 # Calcula posicao inicial para centralizar
-
-            # Desenha cada coracao (cheio ou vazio)
-            for i in range(MAX_LIVES):
-                cx = start_x1 + i * (HEART_SIZE + HEART_GAP) # Posicao X do coracao atual
-
-                # Escolhe cor baseada na vida restante e desenha o coracao
-                color_heart = COLOR_HEART_FULL if self.current_lives > i else COLOR_HEART_EMPTY
-                pyxel.rect(cx, y_heart, HEART_SIZE, HEART_SIZE, color_heart)
-
-            # Coracao - Jogador 2 (ja foi calculado a largura total dos coracoes)
-            start_x2 = x2 + (bar_w - total_heart_w) // 2 # Calcula posicao inicial para centralizar
-
-            # Desenha cada coracao (cheio ou vazio)
-            for i in range(MAX_LIVES):
-                cx = start_x2 + i * (HEART_SIZE + HEART_GAP) # Posicao X do coracao atual
-
-                # Escolhe cor baseada na vida restante e desenha o coracao
-                color_heart = COLOR_HEART_FULL if self.current_lives_p2 > i else COLOR_HEART_EMPTY
-                pyxel.rect(cx, y_heart, HEART_SIZE, HEART_SIZE, color_heart)
-
-            # Texto de status (DEBUG) para mostrar conexao com o segundo jogador
-            if self.game.network.connected:
-                # Estah conectado com algum outro jogador
-                pyxel.text(10, 10, "Multiplayer - Conectado", COLOR_TEXT_HIGHLIGHT)
-
-            else:
-                # Nao estah conectado com nenhum jogador
-                pyxel.text(10, 10, "Multiplayer - Desconectado", COLOR_TEXT_HIGHLIGHT)
-        
-        
-        # HUD para modo singleplayer
-        else:
-            # HUD centralizada
-            cx = (SCREEN_WIDTH - FUEL_BAR_W) // 2 # Centraliza caoracao em 'X' na horizontal
-            y_bar = sep_y + 2 # Posicao Y inicial das barras de gasolina (2px abaixo do separador da HUD)
-
-            # Desenha uma unica barra de combustivel:
-            pyxel.rectb(cx, y_bar, FUEL_BAR_W, FUEL_BAR_H, COLOR_FUEL_BORDER) # Desenha borda da barra
-            filled = int((self.current_fuel / MAX_FUEL) * (FUEL_BAR_W - 2)) # Calcula o nivel de preenchimento da barra
-            pyxel.rect(cx+1, y_bar+1, filled, FUEL_BAR_H-2, COLOR_FUEL) # Preenche proporcionalmente a barra de gasolina
-
-            # Coracoes
-            y_heart = y_bar + FUEL_BAR_H + 2 # Posicao Y dos coracoes (em baixo da barra de gasolina)
-            start_x = (SCREEN_WIDTH - (MAX_LIVES*HEART_SIZE + (MAX_LIVES-1)*HEART_GAP)) // 2 # Calcula posicao inicial dos coracoes para centralizar
-
-            # Desenha cada coracao (cheio ou vazio)
-            for i in range(MAX_LIVES): 
-                xh = start_x + i*(HEART_SIZE + HEART_GAP) # Posicao X do coracao atual
-
-                # Escolhe cor baseada na vida restante e desenha o coracao
-                color_heart = COLOR_HEART_FULL if self.current_lives > i else COLOR_HEART_EMPTY
-                pyxel.rect(xh, y_heart, HEART_SIZE, HEART_SIZE, color_heart)
 
     # Método para verificar colisões
     def check_all_collisions(self):
+
         if self.is_multiplayer:
             # Lógica do host para jogador 1
             if self.is_host and self.invincible_timer_j1 <= 0:
@@ -899,7 +622,7 @@ class GameState:
                     "Jogador 1" # Nome do jogador (para debug)
                 )
                 if colisoes > 0:
-                    self.current_lives = max(0, self.current_lives - 1)  # Perde vida 
+                    self.vida_jogador1 = max(0, self.vida_jogador1 - 1)  # Perde vida 
                     self.invincible_timer_j1 = self.INVINCIBILITY_DURATION  # Ativa invencibilidade
 
             # Lógica do cliente para jogador 2
@@ -910,7 +633,7 @@ class GameState:
                     "Jogador 2"
                 )
                 if colisoes > 0:
-                    self.current_lives_p2 = max(0, self.current_lives_p2 - 1)  # Perde vida
+                    self.vida_jogador2 = max(0, self.vida_jogador2 - 1)  # Perde vida
                     self.invincible_timer_j2 = self.INVINCIBILITY_DURATION  # Ativa invencibilidade
         else:
             # Lógica singleplayer
@@ -921,9 +644,315 @@ class GameState:
                     "Jogador 1"
                 )
                 if colisoes > 0:
-                    self.current_lives = max(0, self.current_lives - 1)  # Perde vida
+                    self.vida_jogador1 = max(0, self.vida_jogador1 - 1)  # Perde vida
                     self.invincible_timer_j1 = self.INVINCIBILITY_DURATION  # Ativa invencibilidade
 
+        ## ————— Colisão Tiro × Árvore (host destrói; ambos removem tiro no primeiro hit) —————
+        for shot_list in (self.shots, self.remote_shots):
+            for shot in shot_list.copy():
+                hit = False
+
+                for tree in self.background.tree_manager.arvores:
+                    # ignora árvores já destruídas
+                    if not tree.visible:
+                        continue
+
+                    # calcula hitboxes
+                    left, top, right, bottom = tree.hitbox
+                    s_left = shot.x
+                    s_right = shot.x + shot.width
+                    s_top = shot.y
+                    s_bottom = shot.y + shot.height
+
+                    if (s_right > left and s_left < right and
+                        s_bottom > top and s_top < bottom):
+                        # host marca a árvore como destruída
+                        if self.is_host:
+                            tree.visible = False
+                            # cria explosão no centro da árvore
+                            cx = (left + right) // 2 - 16 // 2
+                            cy = (top  + bottom) // 2 - 16 // 2
+                            self.explosions.append(
+                                Explosion(cx, cy, 16, 16, 16, 16, duration=8)
+)
+                        # qualquer um remove o tiro no primeiro contato
+                        shot_list.remove(shot)
+                        hit = True
+                        break
+
+                if hit:
+                    # já tratou esse tiro—vai para o próximo
+                    continue
+
+                # se não colidiu e saiu da tela, também remove
+                if shot.is_off_screen():
+                    shot_list.remove(shot)
+
+        ## ————— Colisão Tiro × Barco —————
+        # percorre cada lista de tiros
+        for shot_list in (self.shots, self.remote_shots):
+            for shot in shot_list.copy():
+                for boat in (self.boat_manager.boats if self.is_host else self.remote_boats):
+                    # só colisão em barcos visíveis
+                    if not boat.visible:
+                        continue
+                    # hitbox do barco e do tiro
+                    b_left, b_top, b_right, b_bottom = boat.hitbox
+                    s_left = shot.x
+                    s_right = shot.x + shot.width
+                    s_top = shot.y
+                    s_bottom = shot.y + shot.height
+
+                    if (s_right > b_left and s_left < b_right and
+                        s_bottom > b_top   and s_top < b_bottom):
+                        # host é fonte da verdade: destrói o barco
+                        if self.is_host:
+                            boat.visible = False
+                            # spawn de explosão no centro do barco
+                            cx = (b_left + b_right)//2 - 8   # metade de 16px
+                            cy = (b_top  + b_bottom)//2 - 8
+                            self.explosions.append(
+                                Explosion(cx, cy, 16, 16, 16, 16, duration=8)
+                            )
+                        # em qualquer caso, remove o tiro no primeiro hit
+                        shot_list.remove(shot)
+                        break
+
+        ## ————— Colisão Jogador × Barco —————
+        # verifica invencibilidade e colisão para cada jogador
+        # Jogador 1 (host)  
+        if self.is_host and self.invincible_timer_j1 <= 0:
+            for boat in self.boat_manager.boats:
+                if boat.visible:
+                    left, top, right, bottom = boat.hitbox
+                    j_left = self.player_x
+                    j_right = self.player_x + PLAYER_WIDTH
+                    j_top = self.player_y
+                    j_bottom = self.player_y + PLAYER_HEIGHT
+                    if (j_right > left and j_left < right and
+                        j_bottom > top   and j_top < bottom):
+                        # colisão: perde vida e fica invencível
+                        self.vida_jogador1 = max(0, self.vida_jogador1 - 1)
+                        self.invincible_timer_j1 = self.INVINCIBILITY_DURATION
+                        break
+        # Jogador 2 (cliente)  
+        if not self.is_host and self.invincible_timer_j2 <= 0:
+            for boat in self.remote_boats:
+                if boat.visible:
+                    left, top, right, bottom = boat.hitbox
+                    j_left = self.player_x
+                    j_right = self.player_x + PLAYER_WIDTH
+                    j_top = self.player_y
+                    j_bottom = self.player_y + PLAYER_HEIGHT
+                    if (j_right > left and j_left < right and
+                        j_bottom > top   and j_top < bottom):
+                        self.vida_jogador2 = max(0, self.vida_jogador2 - 1)
+                        self.invincible_timer_j2 = self.INVINCIBILITY_DURATION
+                        break
+
+       
+
+    def update_shots(self):
+        """Atualiza posição e descarta tiros fora da tela — usado tanto em play quanto em pause."""
+        # locais
+        for shot in self.shots:
+            shot.update()
+        self.shots = [s for s in self.shots if not s.is_off_screen()]
+
+        # remotos
+        for shot in self.remote_shots:
+            shot.update()
+        self.remote_shots = [s for s in self.remote_shots if not s.is_off_screen()]
+        
+    # Método para enviar dados pela rede
+    def send_data(self):
+        if self.is_multiplayer and self.game.network.connected:
+            data = {
+                'player': [self.player_x, self.player_y],  # Posição atual
+                'rio_centro': self.background.centro_rio_x,  # Posição do rio
+                'rio_largura': self.background.largura_rio,       # ← NOVO
+                'seed': self.background.tree_manager.random_seed,  # Seed aleatória
+                'invincible': self.invincible_timer_j1 if self.is_host else self.invincible_timer_j2,  # Timer de invencibilidade
+                'type': 'game_update', # Tipo de mensagem
+                'arvores': self.background.tree_manager.get_tree_states() , # Adicione esta linha
+                'shots': [shot.to_dict() for shot in self.shots],
+                'explosions': [exp.to_dict() for exp in self.explosions],
+                'boats': self.boat_manager.get_states(),
+
+
+            }
+            self.game.network.send(data)  # Envia os dados
+
+    # Método para receber dados da rede
+    def receive_data(self):
+        # Define a função receive_data como método da classe (self é a referência ao objeto)
+        
+        if self.is_multiplayer and isinstance(self.game.network.data, dict):
+            # Verifica se o jogo está no modo multiplayer E se os dados recebidos da rede são um dicionário
+            
+            data = self.game.network.data
+            # Armazena os dados recebidos da rede na variável local 'data' para facilitar acesso
+            
+            try:
+                # Inicia um bloco try para capturar possíveis erros no processamento dos dados
+                
+                # Atualiza posição do outro jogador
+                self.player2_x, self.player2_y = data['player']
+                # Extrai as coordenadas x e y do outro jogador do dicionário de dados
+                ## tanto host quanto cliente atualizam os remote_shots
+                if 'shots' in data:
+                    self.remote_shots = [Shot.from_dict(d) for d in data['shots']]
+
+                if 'explosions' in data:
+                        # reconstrói explosões que vieram do outro lado
+                        self.remote_explosions = [
+                            Explosion.from_dict(d) for d in data['explosions']
+                        ]
+
+                # Atualiza barcos remotos (apenas cliente recebe)
+                if 'boats' in data and not self.is_host:
+                    # cliente reconstrói lista de barcos
+                    self.remote_boats = [Boat.from_dict(d) for d in data['boats']]
+
+            
+                # Sincroniza temporizador de invencibilidade
+                if self.is_host:    
+                    # Verifica se esta instância é o host (jogador 1)
+                    self.invincible_timer_j2 = data.get('invincible', 0)
+                    # Host recebe o timer de invencibilidade do cliente (jogador 2)
+                    # Usa .get() para evitar KeyError, retornando 0 se 'invincible' não existir
+                else:
+                    # Caso contrário (se for o cliente)
+                    self.invincible_timer_j1 = data.get('invincible', 0)
+                    # Cliente recebe o timer de invencibilidade do host (jogador 1)
+                    
+                # Clientes sincronizam posição do rio
+                if not self.is_host:
+                    # Verifica se NÃO é o host (ou seja, é o cliente)
+                    self.background.centro_rio_x = data['rio_centro']
+                    # Atualiza a posição central atual do rio no background
+                    self.background.target_centro_x = data['rio_centro']
+                    # Atualiza também a posição alvo (target) do rio para sincronizar a animação
+                 
+                if not self.is_host and 'rio_largura' in data:
+                    self.background.largura_rio    = data['rio_largura']
+                    self.background.target_largura = data['rio_largura']
+                    
+                # Sincroniza seed aleatória se necessário
+                if 'seed' in data and data['seed'] != self.background.tree_manager.random_seed:
+                    # Verifica se existe uma seed nos dados E se é diferente da seed atual
+                    self.background.tree_manager.random_seed = data['seed']
+                    # Atualiza a seed aleatória no gerenciador de árvores
+                    random.seed(data['seed'])
+                    # Define a seed global do módulo random para manter consistência
+                    self.background.tree_manager.reset_arvores()
+                    # Reinicia as árvores com a nova seed para sincronizar a geração aleatória
+                # Sincroniza árvores
+                if 'arvores' in data and not self.is_host:
+                    self.background.tree_manager.set_tree_states(data['arvores'])
+            except (KeyError, TypeError):
+                # Captura exceções caso haja erro ao acessar chaves do dicionário ou tipos incorretos
+                print("Erro na sincronização dos dados")
+                # Imprime mensagem de erro (poderia ser tratado de forma mais robusta em produção)
+
+    # Método para desenhar o jogo
+    def draw(self):
+        pyxel.cls(COLOR_BG)                                   # Limpa a tela com a cor de fundo definida
+        
+        self.background.draw()                                # Desenha o cenário de fundo
+
+        # desenha barcos locais e remotos
+        self.boat_manager.draw()
+        for b in self.remote_boats:
+            b.draw()
+
+        # desenha tiros locais
+        for shot in self.shots:
+            shot.draw()
+        # desenha tiros vindos pela rede
+        for shot in self.remote_shots:
+            shot.draw()
+
+        # desenha explosões locais
+        for exp in self.explosions:
+            exp.draw()
+        # desenha explosões vindas pela rede
+        for exp in self.remote_explosions:
+            exp.draw()
+
+        # Lógica de piscar durante invencibilidade
+        should_draw_j1 = (self.invincible_timer_j1 // 5) % 2 == 0 if self.invincible_timer_j1 > 0 else True  # Define se o jogador 1 deve piscar (quando invencível)
+        should_draw_j2 = (self.invincible_timer_j2 // 5) % 2 == 0 if self.invincible_timer_j2 > 0 else True  # Define se o jogador 2 deve piscar (quando invencível)
+
+        # Renderização do jogador 1
+        if self.is_multiplayer and should_draw_j1:             # Verifica se é multiplayer E se deve desenhar o jogador 1
+            if self.is_host:                                  # Se for o host (jogador 1)
+                pyxel.blt(self.player_x, self.player_y, 0, 32, 0, PLAYER_WIDTH, PLAYER_HEIGHT, colkey=0)  # Desenha o avião (host)
+                pyxel.text(10, 40, f"Suas Vidas: {self.vida_jogador1}", 0)  # Mostra contador de vidas do host
+            else:                                              # Se for o cliente
+                pyxel.blt(self.player2_x, self.player2_y, 0, 32, 0, PLAYER_WIDTH, PLAYER_HEIGHT, colkey=0)  # Desenha o avião do host na posição recebida
+
+       # Renderização do jogador 2 (helicóptero)
+        if self.is_multiplayer and should_draw_j2:
+            # Animação da hélice (alterna entre dois frames a cada 5 frames)
+            helicopter_frame = (pyxel.frame_count // 5) % 2
+            
+            # Coordenadas dos frames na imagem (48,0) e (0,16)
+            u = 48 if helicopter_frame == 0 else 0
+            v = 0 if helicopter_frame == 0 else 16
+
+            if self.is_host:
+                pyxel.blt(
+                    self.player2_x, self.player2_y,
+                    0,            # Banco de imagens
+                    u, v,         # Coordenadas do frame
+                    PLAYER_WIDTH, PLAYER_HEIGHT,
+                    colkey=0
+                )
+            else:
+                pyxel.blt(
+                    self.player_x, self.player_y,
+                    0,            # Banco de imagens
+                    u, v,         # Coordenadas do frame
+                    PLAYER_WIDTH, PLAYER_HEIGHT,
+                    colkey=0
+                )
+                pyxel.text(10, 60, f"Suas Vidas: {self.vida_jogador2}", 1)
+
+        
+        # Status da conexão
+        if self.game.network.connected:                        # Verifica se há conexão de rede
+            pyxel.text(10, 10, "Multiplayer - Conectado", 0)   # Mostra status "Conectado"
+        else:                                                  # Se não estiver conectado
+            pyxel.text(10, 10, "Multiplayer - Desconectado", 0)  # Mostra status "Desconectado"
+
+        # Modo singleplayer
+        if not self.is_multiplayer and should_draw_j1:         # Se não for multiplayer E deve desenhar o jogador
+            pyxel.blt(self.player_x, self.player_y, 0, 32, 0, PLAYER_WIDTH, PLAYER_HEIGHT, colkey=0)  # Desenha o jogador único
+            pyxel.text(10, 40, f"Suas Vidas: {self.vida_jogador1}", 0)  # Mostra contador de vidas
+
+        # # Debug: mostra posições
+        # if self.is_host:                                       # Se for o host
+        #     pyxel.text(10, 20, f"Host: {self.player_x},{self.player_y}", 7)  # Mostra posição do host
+        #     pyxel.text(10, 30, f"Cliente: {self.player2_x},{self.player2_y}", 7)  # Mostra posição do cliente
+        # else:                                                  # Se for o cliente
+        #     pyxel.text(10, 20, f"Host: {self.player2_x},{self.player2_y}", 7)  # Mostra posição do host
+        #     pyxel.text(10, 30, f"Cliente: {self.player_x},{self.player_y}", 7)  # Mostra posição do cliente        
+
+        # # Debug: hitbox das árvores
+        # for arvore in self.background.tree_manager.arvores:    # Itera por todas as árvores
+        #     arv_left, arv_top, arv_right, arv_bottom = arvore.hitbox  # Obtém coordenadas da hitbox
+        #     pyxel.rectb(arv_left, arv_top, arv_right - arv_left, arv_bottom - arv_top, 8)  # Desenha retângulo da hitbox
+        # # debug: hitbox dos barcos
+        # for b in self.boat_manager.boats:
+        #     bar_left, bar_top, bar_right, bar_bottom = b.hitbox  # Obtém coordenadas da hitbox
+        #     pyxel.rectb(bar_left, bar_top, bar_right - bar_left, bar_bottom - bar_top, 8)  # Desenha retângulo da hitbox
+        # # # Debug: hitbox do jogador 1
+        # pyxel.rectb(self.player_x, self.player_y, PLAYER_WIDTH, PLAYER_HEIGHT, 8)  # Desenha retângulo da hitbox do jogador 1
+
+# Classe que gerencia o cenário do jogo (rio e margens)
+from collections import deque
+import pyxel
 
 class Background:
     def __init__(self, is_host=False , is_multiplayer=False):
@@ -970,7 +999,7 @@ class Background:
 
     def update(self):
         
-        
+        5
         if self.is_host or not self.is_multiplayer:
             # —–– curvar (1/2)
             if pyxel.btnp(pyxel.KEY_1):
@@ -1002,6 +1031,7 @@ class Background:
                 self.animating_to_center = True
                 self.target_centro_x = pyxel.width / 2  # Primeiro centraliza
                 self.target_largura = 45  # Reset para largura inicial
+                
 
             # atualiza árvores
             self.tree_manager.update_arvores(self.velocidade_scroll)
@@ -1036,10 +1066,8 @@ class Background:
        
 
     def draw(self):
-        # pinta só até a linha da HUD
-        pyxel.clip(0, 0, pyxel.width, GAME_AREA_HEIGHT)
-        pyxel.rect(0, 0, pyxel.width, GAME_AREA_HEIGHT, 9)
-        for screen_y in range(GAME_AREA_HEIGHT):
+        pyxel.rect(0, 0, pyxel.width, pyxel.height, 9)
+        for screen_y in range(pyxel.height):
             esq, dir = self.obter_margens_rio(screen_y)
             # bordas
             for i in range(4):
@@ -1059,6 +1087,4 @@ class Background:
                     if esq < x < dir:
                         pyxel.pset(int(x), screen_y, 7)
         
-        # desenha só árvores acima da HUD
         self.tree_manager.draw_arvores()
-        pyxel.clip()

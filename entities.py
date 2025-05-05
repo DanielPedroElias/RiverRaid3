@@ -1,126 +1,8 @@
-### Modulo de entidades do jogo. Responsavel por:
-### - Definir classes de entidades (bala, inimigo, item, etc.)
-### - Gerenciar logica de update() e draw() de cada entidade
-
-import time
-import pyxel
-from config import *
+# Importações necessárias para o módulo
+import pyxel          # Biblioteca para criação do jogo
 import random         # Para geração de números aleatórios
 from collections import deque  # Para estrutura de dados eficiente
-
-# Classe base para todas as entidades do jogo (interface informal)
-class Entity:
-    # Cada entidade deve ter:
-    # - x, y: coordenadas
-    # - alive: se ainda esta ativa
-    # - update(): logica por frame
-    # - draw(): renderizacao por frame
-
-    # Construtor
-    def __init__(self, x, y):
-        self.x = x
-        self.y = y
-        self.alive = True
-
-
-    # Atualiza a logica da entidade.
-    # Deve ser sobrescrito nas subclasses.
-    def update(self):
-        pass
-
-    # Desenha a entidade.
-    # Deve ser sobrescrito nas subclasses.
-    def draw(self):
-        pass
-
-# Classe que implementa o tiro disparado pelo aviao (Vai para cima a cada frame)
-class Bullet(Entity):
-    # Construtor
-    def __init__(self, x, y, dy=-BULLET_SPEED): # BULLET_SPEED estah em pixels/frame
-        # Herda da classe Entity e inicializa posicao (x, y)
-        super().__init__(x, y)
-
-        # dy = velocidade vertical (negativo = para cima)
-        self.dy = dy
-    
-    # Atualiza a posicao do tiro e verifica se ele saiu da tela
-    def update(self):
-        self.y += self.dy # Atualiza a posicao do tiro (usando velocidade por FRAME)
-
-        # Verifica se o tiro saiu da parte superior da tela
-        #   Se (posicao 'Y' + altura do tiro) < 0 (fora da tela)
-        if self.y + BULLET_HEIGHT < 0:
-            self.alive = False # Marca o tiro para ser removido
-
-    # Desenha o retangulo que representa o tiro
-    def draw(self):
-        pyxel.rect(self.x, self.y, BULLET_WIDTH, BULLET_HEIGHT, COLOR_BULLET)
-
-# Classe que implementa o tiro disparado pelo aviao (Vai para cima a cada frame)
-class RemoteBullet(Entity):
-    # Construtor
-    def __init__(self, x, y, spawn_time):
-        # Herda da classe Entity e inicializa posicao (x, y)
-        super().__init__(x, y)
-
-        # Guarda a posicao Y inicial do tiro
-        self.initial_y = y
-        
-        # Converte velocidade para pixels/SEGUNDO:
-        self.speed = -BULLET_SPEED * FPS # px/frame * frames/sec = px/sec
-        self.spawn_time = spawn_time # Momento exato do tiro (timestamp em segundos)
-
-    # Atualiza a posicao do tiro e verifica se ele saiu da tela
-    def update(self):
-        # Calcula idade do tiro em SEGUNDOS
-        age = time.time() - self.spawn_time # Segundos que o tiro estah vivo
-
-        # Atualiza a posicao em 'Y' baseada no TEMPO PASSADO:
-        # y = posicao_inicial + (velocidade * tempo)
-        self.y = self.initial_y + (self.speed * age)
-
-        # Verifica se o tiro saiu da tela (usa a mesma logica do tiro local)
-        if self.y + BULLET_HEIGHT < 0:
-            self.alive = False
-
-    # Desenha o retangulo que representa o tiro
-    def draw(self):
-        pyxel.rect(self.x, self.y, BULLET_WIDTH, BULLET_HEIGHT, COLOR_BULLET)
-
-
-# TODO: Implementar a classe para geracao de inimigos
-class Enemy(Entity):
-    # Entidade de inimigo. (Implementar logica de movimento e colisoes)
-    def __init__(self, x, y, **kwargs):
-        super().__init__(x, y)
-        # adicionar atributos como velocidade, vida, etc.
-
-    def update(self):
-        # implementar movimento do inimigo
-        pass
-
-    def draw(self):
-        # desenhar o inimigo
-        # exemplo generico:
-        # pyxel.rect(self.x, self.y, ENEMY_WIDTH, ENEMY_HEIGHT, COLOR_ENEMY)
-        pass
-
-# TODO: Implementar classe para gasolina
-class Gasoline(Entity):
-    # Entidade de item/collectable. (Implementar efeitos ao coletar)
-    def __init__(self, x, y, **kwargs):
-        super().__init__(x, y)
-        # atributos de tipo de item, valor, etc.
-
-    def update(self):
-        # implementar movimento/gravitacao se necessario
-        pass
-
-    def draw(self):
-        # desenhar o item
-        # exemplo generico:
-        # pyxel.rect(self.x, self.y, ITEM_WIDTH, ITEM_HEIGHT, COLOR_ITEM)
-        pass
+from config import *  # Importa constantes do jogo
 
 class Tree:
     """Classe que representa uma árvore no jogo"""
@@ -259,18 +141,18 @@ class TreeManager:
             nova = self._novo_tree_fora(esq0, dir0, y)
             if self._arvore_valida(nova):
                 arvore.x, arvore.y = nova.x, nova.y
+                arvore.visible = True  # ← Resetar visibilidade aqui
                 return
 
         # 2) fallback: coloca à esquerda ou à direita, mas sempre fora do rio
         y = random.randint(-pyxel.height, 0)
-        # distância extra para não grudar na margem
-        margem = self.distancia_rio + self.tree_w  
-        # se couber mais espaço à esquerda, usa ali; senão, na direita
+        margem = self.distancia_rio + self.tree_w
         if esq0 - margem >= self.margem_lateral:
             arvore.x = int(esq0 - margem)
         else:
             arvore.x = int(dir0 + self.distancia_rio)
         arvore.y = y
+        arvore.visible = True  # ← Garantir visibilidade ao reposicionar
 
 
     def update_arvores(self, velocidade_scroll):
@@ -293,8 +175,7 @@ class TreeManager:
     def draw_arvores(self):
         """Desenha todas as árvores visíveis na tela"""
         for arvore in self.arvores:
-            # pula árvores invisíveis ou sob a HUD
-            if not arvore.visible or arvore.y >= GAME_AREA_HEIGHT:
+            if not arvore.visible:
                 continue
 
             # Escolhe o sprite baseado no tipo
@@ -320,6 +201,9 @@ def check_tree_collision(player_x, player_y, arvores, player_name):
     
     # Verifica colisão com cada árvore
     for arvore in arvores:
+        if not arvore.visible:
+           continue
+
         arv_left, arv_top, arv_right, arv_bottom = arvore.hitbox
         # Teste de interseção entre retângulos
         if (jogador_right > arv_left and
@@ -330,3 +214,165 @@ def check_tree_collision(player_x, player_y, arvores, player_name):
             print(f"{player_name} colidiu com uma árvore! (-1 vida)")
     
     return colisoes  # Retorna total de colisões
+
+
+class Shot:
+    """Classe que representa um tiro disparado por um jogador."""
+    def __init__(self, x, y, vy=-2):
+        # posição inicial
+        self.x = x
+        self.y = y
+        # velocidade vertical (vai para cima, por isso negativo)
+        self.vy = vy
+        # dimensões do tiro (ajuste a gosto)
+        self.width = 2
+        self.height = 4
+        # cor do tiro (branco)
+        self.color = 7
+
+    def update(self):
+        """Move o tiro."""
+        self.y += self.vy
+
+    def is_off_screen(self):
+        """Retorna True se o tiro saiu da tela."""
+        return self.y + self.height < 0
+
+    def draw(self):
+        """Desenha o tiro."""
+        pyxel.rect(self.x, self.y, self.width, self.height, self.color)
+
+    def to_dict(self):
+        """Serializa estado para enviar pela rede."""
+        return {'x': self.x, 'y': self.y, 'vy': self.vy}
+
+    @classmethod
+    def from_dict(cls, data):
+        """Reconstrói um Shot a partir de dicionário."""
+        return cls(data['x'], data['y'], data.get('vy', -2))
+    
+
+class Explosion:
+    """Uma explosão que vive por alguns frames e depois some."""
+    def __init__(self, x, y, tile_u, tile_v, width, height, duration=5):
+        # posição da explosão (top‑left)
+        self.x = x
+        self.y = y
+        # coordenadas do frame no tileset (u, v) e tamanho (w,h)
+        self.tile_u = tile_u
+        self.tile_v = tile_v
+        self.width = width
+        self.height = height
+        # quantos updates ela ainda vai viver
+        self.timer = duration
+
+    def update(self):
+        # decrementa o timer; quando chega a zero, indica que deve ser removida
+        self.timer -= 1
+
+    def draw(self):
+        # só desenha enquanto timer > 0
+        if self.timer > 0:
+            # blt(x, y, img_bank, u, v, w, h, [colkey])
+            pyxel.blt(self.x, self.y, 0, self.tile_u, self.tile_v, self.width, self.height, colkey=pyxel.COLOR_BLACK)
+
+    def is_dead(self):
+        return self.timer <= 0
+
+    def to_dict(self):
+           return {
+               'x': self.x,
+               'y': self.y,
+               'tile_u': self.tile_u,
+               'tile_v': self.tile_v,
+               'width': self.width,
+               'height': self.height,
+               'timer': self.timer,
+           }    
+    
+    @classmethod
+    def from_dict(cls, data):
+        exp = cls(
+            data['x'], data['y'],
+            data['tile_u'], data['tile_v'],
+            data['width'], data['height'],
+            duration=data['timer']
+        )
+        return exp
+    
+
+class Boat:
+    """Classe que representa um barco inimigo que navega pelo rio."""
+    def __init__(self, x, y, vy=1):
+        self.x = x
+        self.y = y
+        self.vy = vy              # velocidade para baixo (scroll relativo)
+        self.width = 16
+        self.height = 16
+        self.visible = True
+
+    @property
+    def hitbox(self):
+        return (
+            self.x + 1,
+            self.y + 1,
+            self.x + self.width - 1,
+            self.y + self.height - 1,
+        )
+
+    def update(self):
+        self.y += self.vy
+
+    def draw(self):
+        if self.visible:
+            # sprite de barco em (32,16) no banco 0
+            pyxel.blt(self.x, self.y, 0, 32, 16, self.width, self.height, colkey=0)
+
+    def to_dict(self):
+        return {'x': self.x, 'y': self.y, 'vy': self.vy, 'visible': self.visible}
+
+    @classmethod
+    def from_dict(cls, data):
+        b = cls(data['x'], data['y'], data.get('vy', 1))
+        b.visible = data.get('visible', True)
+        return b
+
+
+class BoatManager:
+    """Gerencia criação, atualização e reposicionamento de barcos dentro do rio."""
+    def __init__(self, background, max_boats=50, spawn_interval=30,):
+        self.background = background
+        self.max_boats = max_boats
+        self.spawn_interval = spawn_interval  # frames entre tentativas de spawn
+        self.timer = 0
+        self.boats = []
+
+    def update(self):
+        # cria novos barcos se host e houver slot
+        if self.background.is_host:
+            self.timer += 1
+            if self.timer >= self.spawn_interval and len(self.boats) < self.max_boats:
+                self.timer = 0
+                # spawn no topo, dentro das margens do rio
+                esq, dir = self.background.obter_margens_rio(0)
+                x = random.randint(int(esq), int(dir - 16))
+                self.boats.append(Boat(x, y=-16))
+        # atualiza posição de todos
+        for boat in self.boats:
+            boat.update()
+        # reposiciona/destrói barcos que saíram da tela
+        for boat in self.boats.copy():
+            if boat.y > pyxel.height:
+                # respawn como novo barco
+                if self.background.is_host:
+                    self.boats.remove(boat)
+
+    def draw(self):
+        for boat in self.boats:
+            boat.draw()
+
+    def get_states(self):
+        return [b.to_dict() for b in self.boats]
+
+    def set_states(self, states):
+        self.boats = [Boat.from_dict(d) for d in states]
