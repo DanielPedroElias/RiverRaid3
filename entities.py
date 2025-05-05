@@ -341,7 +341,7 @@ class Boat:
 class BoatManager:
     """Gerencia criação, atualização e reposicionamento de barcos dentro do rio,
        evitando que nasçam muito próximos uns dos outros."""
-    def __init__(self, background, max_boats=10, spawn_chance=0.8, min_spawn_distance=24):
+    def __init__(self, background, max_boats=10, spawn_chance=0.02, min_spawn_distance=24):
         self.background = background
         self.max_boats = max_boats
         self.spawn_chance = spawn_chance    # chance por pixel de scroll
@@ -362,10 +362,11 @@ class BoatManager:
         if self.background.animating_to_center:
             self.spawn_chance = 0.8
         else:
-            self.spawn_chance = 0.2
+           self.spawn_chance = 0.02
 
-        # printa a chance de spawn
+        # printa a spawn chance
         # print(f"Spawn chance: {self.spawn_chance:.2f}")
+
         # 1) move todos
         for b in self.boats:
             b.update()
