@@ -38,8 +38,8 @@ PLAYER_HEIGHT = 16      # Altura do jogador
 # HUD
 MAX_LIVES = 3               # Quantidade maxima de vida de um jogador
 MAX_FUEL = 100              # Quantidade maxima de gasolina de um jogador
-FUEL_CONSUMPTION_RATE = 10  # Unidades de combustivel consumidas por segundo
-HUD_HEIGHT = 24             # Tamanho da HUD 
+FUEL_CONSUMPTION_RATE = 50  # Unidades de combustivel consumidas por segundo
+HUD_HEIGHT = 30             # Tamanho da HUD 
 PADDING = 4             # Espaco padrao entre elementos/bordas (em pixels)
 FUEL_BAR_H = 8          # Altura da barra de combustivel (em pixels)
 FUEL_BAR_W = 100        # Largura total da barra de combustivel (em pixels)
