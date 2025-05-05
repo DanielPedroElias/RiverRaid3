@@ -5,6 +5,7 @@
 
 # Bibliotecas
 from time import sleep
+from time import sleep
 import pyxel            # Engine do jogo
 from config import *    # Importa constantes e configuracoes do arquivo "config.py"
 from entities import *  # Importa as classes de entidades do jogo (jogador, arvores, etc.)
@@ -572,12 +573,9 @@ class GameState:
         self.boat_manager = BoatManager(self.background)    # barcos locais (host gera)
         self.remote_boats = []                             # barcos sincronizados via rede
 
-
-
-    def _collide_player(self, hitbox, px, py):
-        left, top, right, bottom = hitbox
-        return (px+PLAYER_WIDTH>left and px<right and
-                py+PLAYER_HEIGHT>top and py<bottom)
+        # Bombas de gasolina (host gera; clientes sincronizam)
+        self.bomb_manager = GasolineBombManager(self.background)
+        self.remote_bombs = []
     
     # Método para atualizar o estado do jogo a cada frame
     def update(self):
@@ -651,15 +649,12 @@ class GameState:
         game_area_height = SCREEN_HEIGHT - HUD_HEIGHT
         self.player_y = max(0, min(self.player_y, game_area_height - PLAYER_HEIGHT))
 
-        # Gasolina:
-        consumption_per_frame = FUEL_CONSUMPTION_RATE / FPS # Calcula qtd de gasolina para consumir neste frame (unidades por frame)
-        # Atualizacao para o modo Singleplayer da gasolina:
-        if not self.is_multiplayer:
-            self.fuel_player1 = max(0, self.fuel_player1 - consumption_per_frame) # Decrementa, garantindo que nunca fique negativo
-        if self.is_host:
-            self.fuel_player1 = max(0, self.fuel_player1 - consumption_per_frame) # Decrementa, garantindo que nunca fique negativo
-        else:
-            self.fuel_player2 = max(0, self.fuel_player2 - consumption_per_frame) # Decrementa, garantindo que nunca fique negativo
+        # ——— Consumo de gasolina (apenas no host ou singleplayer) ———
+        consumption = FUEL_CONSUMPTION_RATE / FPS
+        if self.is_host or not self.is_multiplayer:
+            # host autoritário: consome para jogador 1 e jogador 2
+            self.fuel_player1 = max(0, self.fuel_player1 - consumption)
+            self.fuel_player2 = max(0, self.fuel_player2 - consumption)
 
         # Atualiza temporizadores de invencibilidade
         if self.invincible_timer_j1 > 0:
@@ -686,6 +681,17 @@ class GameState:
         # recebe remote_boats já populada em receive_data
         for b in self.remote_boats:
             b.update()
+
+        
+        # --- Bombas de gasolina ---
+        if self.is_host or not self.is_multiplayer:
+            # host/singleplayer: gera, move e trata colisões
+            self.bomb_manager.update()
+        else:
+            # cliente: apenas move visualmente as bombas vindas do host
+            for b in self.remote_bombs:
+                b.update()
+
 
         
         # Verificação de colisões
@@ -868,7 +874,139 @@ class GameState:
                             pyxel.play(1, 2) # Som de colisao
                             self.pending_sounds.append((1, 2)) # Envia para Cliente o som
                         break
-        
+                    
+        # ————— Colisão Jogador × Bomba de Gasolina —————
+        if self.is_host or not self.is_multiplayer:
+            # Host (ou singleplayer): checa ambos jogadores contra o mesmo bomb_manager
+            for b in self.bomb_manager.bombs:
+                if not b.visible:
+                    continue
+
+                left, top, right, bottom = b.hitbox
+
+                # jogador 1 (host)
+                if (self.player_x + PLAYER_WIDTH > left and
+                    self.player_x < right and
+                    self.player_y + PLAYER_HEIGHT > top and
+                    self.player_y < bottom):
+                    b.visible = False
+                    self.fuel_player1 = min(MAX_FUEL, self.fuel_player1 + 30)
+                    continue  # já removido, passa pra próxima bomba
+
+                # jogador 2 (cliente) — só faz se tivermos posição dele
+                if hasattr(self, 'player2_x'):
+                    if (self.player2_x + PLAYER_WIDTH > left and
+                        self.player2_x < right and
+                        self.player2_y + PLAYER_HEIGHT > top and
+                        self.player2_y < bottom):
+                        b.visible = False
+                        self.fuel_player2 = min(MAX_FUEL, self.fuel_player2 + 30)
+
+        else:
+            # Cliente: só desenha ou “esconde” visualmente a remote_bombs
+            for b in self.remote_bombs:
+                if not b.visible:
+                    continue
+                left, top, right, bottom = b.hitbox
+                if (self.player_x + PLAYER_WIDTH > left and
+                    self.player_x < right and
+                    self.player_y + PLAYER_HEIGHT > top and
+                    self.player_y < bottom):
+                    b.visible = False
+                    break
+
+        ## ————— Colisão Tiro × Bomba de Gasolina —————
+        if self.is_host or not self.is_multiplayer:
+            # host autoritário: só ele destrói bombas e gera explosão
+            for shot_list in (self.shots,):
+                for shot in shot_list.copy():
+                    for b in self.bomb_manager.bombs:
+                        if not b.visible:
+                            continue
+                        # hitbox do tiro vs bomba
+                        left, top, right, bottom = b.hitbox
+                        s_left, s_right = shot.x, shot.x + shot.width
+                        s_top, s_bottom = shot.y, shot.y + shot.height
+                        if (s_right > left and s_left < right and
+                            s_bottom > top and s_top < bottom):
+                            # destrói bomba
+                            b.visible = False
+                            # remove o tiro
+                            shot_list.remove(shot)
+                            # spawn de explosão no centro da bomba
+                            cx = b.x + b.width // 2 - 8
+                            cy = b.y + b.height // 2 - 8
+                            self.explosions.append(
+                                Explosion(cx, cy, 16, 16, 16, 16, duration=12)
+                            )
+                            break
+        else:
+            # cliente: só esconde visualmente a bomba que vier do host
+            for shot_list in (self.shots,):
+                for shot in shot_list.copy():
+                    for b in self.remote_bombs:
+                        if not b.visible:
+                            continue
+                        left, top, right, bottom = b.hitbox
+                        s_left, s_right = shot.x, shot.x + shot.width
+                        s_top, s_bottom = shot.y, shot.y + shot.height
+                        if (s_right > left and s_left < right and
+                            s_bottom > top and s_top < bottom):
+                            b.visible = False
+                            shot_list.remove(shot)
+                            break
+                        
+        # Jogador 1 morreu?
+        if self.life_player1 == 0 and not getattr(self, "_exploded_j1", False) and (self.is_host or not self.is_multiplayer):
+            # marca que já acionou explosão
+            self._exploded_j1 = True
+            # centro do avião 1
+
+            cx = self.player_x + PLAYER_WIDTH//2 - 8
+            cy = self.player_y + PLAYER_HEIGHT//2 - 8
+            self.explosions.append(
+                Explosion(cx, cy, 16, 16, 16, 16, duration=30)
+            )
+
+        # Jogador 2 morreu?
+        if self.is_multiplayer and self.life_player2 == 0 and not getattr(self, "_exploded_j2", False):
+            self._exploded_j2 = True
+            # posição do avião 2 depende se host ou client
+            px, py = (self.player2_x, self.player2_y) if self.is_host else (self.player_x, self.player_y)
+            cx = px + PLAYER_WIDTH//2 - 8
+            cy = py + PLAYER_HEIGHT//2 - 8
+            self.explosions.append(
+                Explosion(cx, cy, 16, 16, 16, 16, duration=30)
+            )
+
+        # ————— Perda de vida quando acaba o combustível —————
+        # apenas o host (ou singleplayer) aplica a penalidade
+        if self.is_host or not self.is_multiplayer:
+            # — jogador 1 sem gasolina
+            if self.fuel_player1 <= 0:
+                self.life_player1 = max(0, self.life_player1 - 1)
+                self.invincible_timer_j1 = self.INVINCIBILITY_DURATION
+                self.fuel_player1 = MAX_FUEL
+
+            # — jogador 2 sem gasolina (só faz sentido em multiplayer)
+            if self.is_multiplayer and self.fuel_player2 <= 0:
+                self.life_player2 = max(0, self.life_player2 - 1)
+                self.invincible_timer_j2 = self.INVINCIBILITY_DURATION
+                self.fuel_player2 = MAX_FUEL
+
+        # Fim de jogo:
+        # Condição SINGLEPLAYER
+        if not self.is_multiplayer and self.life_player1 == 0 and not self.death_delay:
+            self.death_delay = True
+            self.death_delay_timer = 2 * FPS   # 2 segundos de delay
+
+        # Condição MULTIPLAYER
+        elif self.is_multiplayer and self.life_player1 == 0 and (not self.game.network.connected or self.life_player2 == 0) and not self.death_delay:
+            self.death_delay = True
+            self.death_delay_timer = 2 * FPS    # 2 segundos de delay
+
+
+
         # Jogador 1 morreu?
         if self.life_player1 == 0 and not getattr(self, "_exploded_j1", False) and (self.is_host or not self.is_multiplayer):
             # marca que já acionou explosão
@@ -941,9 +1079,14 @@ class GameState:
                     'explosions': [exp.to_dict() for exp in self.explosions],
                     'boats': self.boat_manager.get_states(),
                     'player_type': 'host',
-                    'fuel': self.fuel_player1,
-                    'lives': self.life_player1,
-                    "sounds": self.pending_sounds,
+                    'bombs': self.bomb_manager.get_states(),
+                    'player_x': self.player_x,
+                    'player_y': self.player_y,
+                    'fuel_player1': self.fuel_player1,
+                    'fuel_player2': self.fuel_player2,
+                    'lives_player1': self.life_player1,
+                    'lives_player2': self.life_player2,
+                    "sounds": self.pending_sounds
                 }
             else:
                 data = {
@@ -958,9 +1101,10 @@ class GameState:
                     'explosions': [exp.to_dict() for exp in self.explosions],
                     'boats': self.boat_manager.get_states(),
                     'player_type': 'client',
-                    'fuel': self.fuel_player2,
-                    'lives': self.life_player2,
-                    "sounds": self.pending_sounds,
+                    'bombs': self.bomb_manager.get_states(),
+                    'player_x': self.player_x,
+                    'player_y': self.player_y,
+                    "sounds": self.pending_sounds
                 }
 
             self.pending_sounds = []  # limpa a fila de sons
@@ -998,31 +1142,66 @@ class GameState:
                         # cliente reconstrói lista de barcos
                         self.remote_boats = [Boat.from_dict(d) for d in data['boats']]
 
-                
+
+                     # Sincroniza bombas
+                    if 'bombs' in data and not self.is_host:
+                        from entities import GasolineBomb
+                        self.remote_bombs = [
+                            GasolineBomb.from_dict(d) for d in data['bombs']
+                        ]
                     # Sincroniza temporizador de invencibilidade
                     if self.is_host:   
-                        # Pega gasolina e vida se o host recebe um pacote do cliente
-                        if data.get('player_type', -1) == 'client':
-                            self.fuel_player2 = data.get('fuel', self.fuel_player2)
-                            self.life_player2 = data.get('lives', self.life_player2)
-                            # Toca os sons recebidos pelo cliente (se tiver)
+                        # Pega gasolina  se o host recebe um pacote do cliente
+                        if data.get('player_type') == 'client':
+                            # apenas posição e invencibilidade do jogador 2
+                            self.player2_x = data['player_x']
+                            self.player2_y = data['player_y']
+                            self.invincible_timer_j2 = data.get('invincible_j2', self.invincible_timer_j2)
+                            
+                            # Toca os sons recebidos pelo Cliente
                             for channel, sound_id in data.get("sounds", []): 
                                 pyxel.play(channel, sound_id)
-                        
+                            # NÃO sobrescreva fuel nem lives aqui!
+                        else:  # cliente
+                            if data.get('player_type') == 'host':
+                                # posição e invincibility do jogador 1
+                                self.player2_x = data['player_x']
+                                self.player2_y = data['player_y']
+                                self.invincible_timer_j1 = data.get('invincible_j1', self.invincible_timer_j1)
+                                self.invincible_timer_j2 = data.get('invincible_j2', self.invincible_timer_j2)
+                                # agora fuel e lives de ambos
+                                self.fuel_player1  = data.get('fuel_player1',  self.fuel_player1)
+                                self.fuel_player2  = data.get('fuel_player2',  self.fuel_player2)
+                                self.life_player1  = data.get('lives_player1', self.life_player1)
+                                self.life_player2  = data.get('lives_player2', self.life_player2)
+                                # cenário, barcos, bombas, etc.
+                                self.background.centro_rio_x = data['rio_centro']
+                                self.background.target_centro_x = data['rio_centro']
+                                self.background.largura_rio    = data['rio_largura']
+                                self.background.target_largura = data['rio_largura']
+                                self.background.tree_manager.set_tree_states(data['arvores'])
+                                self.remote_shots      = [Shot.from_dict(d) for d in data['shots']]
+                                self.remote_explosions = [Explosion.from_dict(d) for d in data['explosions']]
+                                self.remote_boats      = [Boat.from_dict(d) for d in data['boats']]
+                                self.remote_bombs      = [GasolineBomb.from_dict(d) for d in data['bombs']]
+
+                                # Toca os sons recebidos pelo Host
+                                for channel, sound_id in data.get("sounds", []): 
+                                    pyxel.play(channel, sound_id)
                         # Verifica se esta instância é o host (jogador 1)
                         self.invincible_timer_j2 = data.get('invincible', 0)
                         # Host recebe o timer de invencibilidade do cliente (jogador 2)
                         # Usa .get() para evitar KeyError, retornando 0 se 'invincible' não existir
-                    
                     else:
-                        # Pega gasolina e vida se o cliente recebe um pacote do host
-                        if data.get('player_type', -1) == 'host':
-                            self.fuel_player1 = data.get('fuel', self.fuel_player1)
-                            self.life_player1 = data.get('lives', self.life_player1)
-                            # Toca os sons recebidos pelo host (se tiver)
-                            for channel, sound_id in data.get("sounds", []): 
-                                pyxel.play(channel, sound_id)
-
+                        # Pega gasolina  se o cliente recebe um pacote do host
+                        # Cliente recebe do host
+                        if data.get('player_type') == 'host':
+                            # atualiza os combustíveis
+                            self.fuel_player1 = data.get('fuel_player1', self.fuel_player1)
+                            self.fuel_player2 = data.get('fuel_player2', self.fuel_player2)
+                            # agora também atualiza a vida do jogador 2
+                            self.life_player1 = data.get('lives_player1', self.life_player1)
+                            self.life_player2 = data.get('lives_player2', self.life_player2)
                         # Caso contrário (se for o cliente)
                         self.invincible_timer_j1 = data.get('invincible', 0)
                         # Cliente recebe o timer de invencibilidade do host (jogador 1)
@@ -1082,6 +1261,13 @@ class GameState:
         self.boat_manager.draw()
         for b in self.remote_boats:
             b.draw()
+
+       # Bombas: cliente só desenha remote_bombs
+        if self.is_host or not self.is_multiplayer:
+            self.bomb_manager.draw()
+        else:
+            for b in self.remote_bombs:
+                b.draw()
 
         # desenha tiros locais
         for shot in self.shots:

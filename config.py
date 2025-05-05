@@ -25,6 +25,9 @@ COLOR_ERROR = 8             # Cor usada para mensagens de erro de conexao
 COLOR_HUD_LINE = 7          # Cor da linha da HUD que separa a HUD do jogo
 COLOR_FUEL_BORDER = 7       # Cor da borda da barra de gasolina da HUD do jogo
 COLOR_FUEL = 11             # Cor da gasolina (HUD)
+COLOR_HUD_LINE = 7          # Cor da linha da HUD que separa a HUD do jogo
+COLOR_FUEL_BORDER = 7       # Cor da borda da barra de gasolina da HUD do jogo
+COLOR_FUEL = 11             # Cor da gasolina (HUD)
 
 # Mensagem de conexao (Menus do Multiplayer)
 MESSAGE_DISPLAY_TIME = 60   # Contador de quantos frames uma mensagem de sucesso/erro de conexao vai ficar na tela (em FPS)
@@ -38,7 +41,7 @@ PLAYER_HEIGHT = 16      # Altura do jogador
 # HUD
 MAX_LIVES = 3               # Quantidade maxima de vida de um jogador
 MAX_FUEL = 100              # Quantidade maxima de gasolina de um jogador
-FUEL_CONSUMPTION_RATE = 10  # Unidades de combustivel consumidas por segundo
+FUEL_CONSUMPTION_RATE = 50  # Unidades de combustivel consumidas por segundo
 HUD_HEIGHT = 30             # Tamanho da HUD 
 PADDING = 4             # Espaco padrao entre elementos/bordas (em pixels)
 FUEL_BAR_H = 8          # Altura da barra de combustivel (em pixels)

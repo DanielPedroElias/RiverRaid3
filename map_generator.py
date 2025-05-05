@@ -44,6 +44,7 @@ class Background:
         self.max_largura = pyxel.width - 30  # Largura máxima igual ao KEY_3
 
         self.comandos = deque([
+            ("WAIT", 300),
             ("KEY_1", 1),   # ← só 1 frame pressionado
             ("WAIT", 150),
             ("KEY_1", 1),

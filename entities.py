@@ -401,3 +401,91 @@ class BoatManager:
 
     def set_states(self, states):
         self.boats = [Boat.from_dict(d) for d in states]
+
+class GasolineBomb:
+    """Bomba de gasolina que cai do topo e reabastece o jogador."""
+    def __init__(self, x, y, vy=1):
+        self.x = x
+        self.y = y
+        self.vy = vy
+        self.width = 16
+        self.height = 16
+        self.visible = True
+
+    @property
+    def hitbox(self):
+        return (
+            self.x + 1,
+            self.y + 1,
+            self.x + self.width - 1,
+            self.y + self.height - 1,
+        )
+
+    def update(self):
+        self.y += self.vy
+
+    def draw(self):
+        if self.visible:
+            # sprite em (48,16) no banco 0
+            pyxel.blt(self.x, self.y, 0, 48, 16, self.width, self.height, colkey=0)
+
+    def to_dict(self):
+        return {'x': self.x, 'y': self.y, 'vy': self.vy, 'visible': self.visible}
+
+    @classmethod
+    def from_dict(cls, data):
+        b = cls(data['x'], data['y'], data.get('vy', 1))
+        b.visible = data.get('visible', True)
+        return b
+
+
+class GasolineBombManager:
+    def __init__(self, background, max_bombs=5, spawn_interval_s=2):
+        """
+        background: referência ao Background (para largura da tela).
+        max_bombs: número máximo de bombas simultâneas.
+        spawn_interval_s: intervalo fixo em segundos.
+        """
+        self.background = background
+        self.max_bombs = max_bombs
+        self.spawn_interval_frames = spawn_interval_s * 60  # 60 FPS do Pyxel
+        self.bombs = []
+        # armazena o frame do último spawn
+        self._last_spawn_frame = pyxel.frame_count
+
+    def _can_spawn(self, x, y):
+        # evita spawn muito próximo de outra bomba
+        for b in self.bombs:
+            if abs(b.x - x) < 16 and abs(b.y - y) < 16:
+                return False
+        return True
+
+    def update(self):
+        # 1) Move todas as bombas
+        for b in self.bombs:
+            b.update()
+
+        # 2) Remove as que saíram da tela ou foram destruídas
+        self.bombs = [b for b in self.bombs if b.y <= pyxel.height and b.visible]
+
+        # 3) Spawn garantido a cada intervalo fixo
+        current = pyxel.frame_count
+        if (current - self._last_spawn_frame) >= self.spawn_interval_frames:
+            # só adiciona se não atingiu o máximo
+            if len(self.bombs) < self.max_bombs:
+                x = random.randint(0, pyxel.width - 16)
+                y = -16
+                if self._can_spawn(x, y):
+                    self.bombs.append(GasolineBomb(x, y))
+            # reinicia o contador, mesmo que max_bombs já tenha sido atingido
+            self._last_spawn_frame = current
+
+    def draw(self):
+        for b in self.bombs:
+            b.draw()
+
+    def get_states(self):
+        return [b.to_dict() for b in self.bombs]
+
+    def set_states(self, states):
+        self.bombs = [GasolineBomb.from_dict(d) for d in states]
