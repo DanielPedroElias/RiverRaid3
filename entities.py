@@ -440,24 +440,49 @@ class GasolineBomb:
 
 
 class GasolineBombManager:
-    def __init__(self, background, max_bombs=5, spawn_interval_s=2):
+    """
+    Gera uma bomba de gasolina a cada intervalo fixo, até max_bombs simultâneas,
+    evitando spawn sobre árvores ou barcos.
+    """
+    def __init__(self, background, boat_manager, max_bombs=5, spawn_interval_s=1):
         """
-        background: referência ao Background (para largura da tela).
+        background: Background (para acessar árvores e largura da tela).
+        boat_manager: BoatManager (para checar colisão com barcos).
         max_bombs: número máximo de bombas simultâneas.
-        spawn_interval_s: intervalo fixo em segundos.
+        spawn_interval_s: intervalo fixo em segundos entre spawns.
         """
         self.background = background
+        self.boat_manager = boat_manager
         self.max_bombs = max_bombs
-        self.spawn_interval_frames = spawn_interval_s * 60  # 60 FPS do Pyxel
+        self.spawn_interval_frames = int(spawn_interval_s * 60)  # 60 FPS
         self.bombs = []
-        # armazena o frame do último spawn
         self._last_spawn_frame = pyxel.frame_count
 
     def _can_spawn(self, x, y):
-        # evita spawn muito próximo de outra bomba
+        """Retorna False se (x,y) colidir com outra bomba, árvore ou barco."""
+        # colisão com outras bombas
         for b in self.bombs:
-            if abs(b.x - x) < 16 and abs(b.y - y) < 16:
+            if abs(b.x - x) < b.width and abs(b.y - y) < b.height:
                 return False
+
+        # colisão com árvores
+        for tree in self.background.tree_manager.arvores:
+            if not tree.visible:
+                continue
+            left, top, right, bottom = tree.hitbox
+            if (x + 16 > left and x < right and
+                y + 16 > top  and y < bottom):
+                return False
+
+        # colisão com barcos
+        for boat in self.boat_manager.boats:
+            if not boat.visible:
+                continue
+            left, top, right, bottom = boat.hitbox
+            if (x + 16 > left and x < right and
+                y + 16 > top  and y < bottom):
+                return False
+
         return True
 
     def update(self):
@@ -468,16 +493,17 @@ class GasolineBombManager:
         # 2) Remove as que saíram da tela ou foram destruídas
         self.bombs = [b for b in self.bombs if b.y <= pyxel.height and b.visible]
 
-        # 3) Spawn garantido a cada intervalo fixo
+        # 3) Spawn garantido a cada intervalo
         current = pyxel.frame_count
         if (current - self._last_spawn_frame) >= self.spawn_interval_frames:
-            # só adiciona se não atingiu o máximo
             if len(self.bombs) < self.max_bombs:
-                x = random.randint(0, pyxel.width - 16)
-                y = -16
-                if self._can_spawn(x, y):
-                    self.bombs.append(GasolineBomb(x, y))
-            # reinicia o contador, mesmo que max_bombs já tenha sido atingido
+                # tenta até 5 posições aleatórias
+                for _ in range(5):
+                    x = random.randint(0, pyxel.width - 16)
+                    y = -16
+                    if self._can_spawn(x, y):
+                        self.bombs.append(GasolineBomb(x, y))
+                        break
             self._last_spawn_frame = current
 
     def draw(self):
