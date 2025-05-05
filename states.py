@@ -891,6 +891,10 @@ class GameState:
                     self.player_y < bottom):
                     b.visible = False
                     self.fuel_player1 = min(MAX_FUEL, self.fuel_player1 + 30)
+                    if not self.death_delay and not self.game_over and self.life_player1 > 0:
+                        pyxel.play(3, 5) # Som de pegar gasolina
+                        self.pending_sounds.append((3, 5)) # Envia para Cliente o som
+
                     continue  # já removido, passa pra próxima bomba
 
                 # jogador 2 (cliente) — só faz se tivermos posição dele
@@ -913,6 +917,11 @@ class GameState:
                     self.player_y + PLAYER_HEIGHT > top and
                     self.player_y < bottom):
                     b.visible = False
+                    
+                    if not self.death_delay and not self.game_over and self.life_player2 > 0:
+                        pyxel.play(3, 5) # Som de pegar gasolina
+                        self.pending_sounds.append((3, 5)) # Envia para Host o som
+
                     break
 
         ## ————— Colisão Tiro × Bomba de Gasolina —————
@@ -939,6 +948,10 @@ class GameState:
                             self.explosions.append(
                                 Explosion(cx, cy, 16, 16, 16, 16, duration=12)
                             )
+
+                            pyxel.play(1, 2) # Som de colisao
+                            self.pending_sounds.append((1, 2)) # Envia para Cliente o som
+
                             break
         else:
             # cliente: só esconde visualmente a bomba que vier do host
@@ -954,6 +967,10 @@ class GameState:
                             s_bottom > top and s_top < bottom):
                             b.visible = False
                             shot_list.remove(shot)
+
+                            pyxel.play(1, 2) # Som de colisao
+                            self.pending_sounds.append((1, 2)) # Envia para Host o som
+                            
                             break
                         
         # Jogador 1 morreu?
@@ -968,6 +985,9 @@ class GameState:
                 Explosion(cx, cy, 16, 16, 16, 16, duration=30)
             )
 
+            pyxel.play(1, 2) # Som de explosao
+            self.pending_sounds.append((1, 2)) # Envia para Cliente o som
+
         # Jogador 2 morreu?
         if self.is_multiplayer and self.life_player2 == 0 and not getattr(self, "_exploded_j2", False):
             self._exploded_j2 = True
@@ -978,6 +998,9 @@ class GameState:
             self.explosions.append(
                 Explosion(cx, cy, 16, 16, 16, 16, duration=30)
             )
+
+            pyxel.play(1, 2) # Som de explosao
+            self.pending_sounds.append((1, 2)) # Envia para Cliente o som
 
         # ————— Perda de vida quando acaba o combustível —————
         # apenas o host (ou singleplayer) aplica a penalidade
@@ -993,18 +1016,6 @@ class GameState:
                 self.life_player2 = max(0, self.life_player2 - 1)
                 self.invincible_timer_j2 = self.INVINCIBILITY_DURATION
                 self.fuel_player2 = MAX_FUEL
-
-        # Fim de jogo:
-        # Condição SINGLEPLAYER
-        if not self.is_multiplayer and self.life_player1 == 0 and not self.death_delay:
-            self.death_delay = True
-            self.death_delay_timer = 2 * FPS   # 2 segundos de delay
-
-        # Condição MULTIPLAYER
-        elif self.is_multiplayer and self.life_player1 == 0 and (not self.game.network.connected or self.life_player2 == 0) and not self.death_delay:
-            self.death_delay = True
-            self.death_delay_timer = 2 * FPS    # 2 segundos de delay
-
 
 
         # Jogador 1 morreu?
