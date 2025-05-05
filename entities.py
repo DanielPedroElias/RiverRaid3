@@ -371,7 +371,7 @@ class BoatManager:
         for b in self.boats:
             b.update()
 
-        if self.background.is_host:
+        if (self.background.is_host or not self.background.is_multiplayer):
         # 2) descarta os que saíram
             self.boats = [b for b in self.boats if b.y <= pyxel.height]
 
