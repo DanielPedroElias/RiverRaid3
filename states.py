@@ -9,6 +9,7 @@ import pyxel            # Engine do jogo
 from config import *    # Importa constantes e configuracoes do arquivo "config.py"
 from entities import *  # Importa as classes de entidades do jogo (jogador, arvores, etc.)
 from map_generator import Background
+import music
 
 # Classe para o Menu Principal do jogo
 class MenuState:
@@ -18,6 +19,7 @@ class MenuState:
         self.game = game # Recebe a instancia do jogo
         self.selected = 0 # Recebe a posicao que o jogador vai selecionar ("Singleplayer" ou "Multiplayer"). Comeca com "Singleplayer"
         self.options = ["Singleplayer", "Multiplayer"] # Opcoes do menu principal
+        music.play_menu_music() # Toca a musica dos menus
     
     # Processa selecao de opcoes do menu principal
     def update(self):
@@ -430,38 +432,39 @@ class PauseMenuState:
         # Só faz sentido em cima de um GameState
         if not isinstance(self.game.previous_state, GameState):
             return
-
+        
         gs = self.game.previous_state
-        if gs.invincible_timer_j1 > 0:
-            gs.invincible_timer_j1 -= 1
-        if gs.invincible_timer_j2 > 0:
-            gs.invincible_timer_j2 -= 1
+        if self.game.previous_state.is_multiplayer:    
+            if gs.invincible_timer_j1 > 0:
+                gs.invincible_timer_j1 -= 1
+            if gs.invincible_timer_j2 > 0:
+                gs.invincible_timer_j2 -= 1
 
-        # 1) mantém o scroll do rio
-        gs.background.update()
+            # 1) mantém o scroll do rio
+            gs.background.update()
 
-        # 2) rede continua ativa em multiplayer
-        if gs.is_multiplayer:
-            gs.send_data()
-            gs.receive_data()
+            # 2) rede continua ativa em multiplayer
+            if gs.is_multiplayer:
+                gs.send_data()
+                gs.receive_data()
 
-        # 3) tiros continuam voando
-        gs.update_shots()
+            # 3) tiros continuam voando
+            gs.update_shots()
 
-        # 4) barcos continuam navegando (apenas UMA chamada)
-        gs.boat_manager.update()
+            # 4) barcos continuam navegando (apenas UMA chamada)
+            gs.boat_manager.update()
 
-        # 5) colisões continuam sendo testadas
-        gs.check_all_collisions()
+            # 5) colisões continuam sendo testadas
+            gs.check_all_collisions()
 
-        # 6) explosões continuam animando
-        for exp in gs.explosions:
-            exp.update()
-        gs.explosions = [e for e in gs.explosions if not e.is_dead()]
+            # 6) explosões continuam animando
+            for exp in gs.explosions:
+                exp.update()
+            gs.explosions = [e for e in gs.explosions if not e.is_dead()]
 
-        for exp in gs.remote_explosions:
-            exp.update()
-        gs.remote_explosions = [e for e in gs.remote_explosions if not e.is_dead()]
+            for exp in gs.remote_explosions:
+                exp.update()
+            gs.remote_explosions = [e for e in gs.remote_explosions if not e.is_dead()]
 
         # 7) navegação do menu de pause
         if pyxel.btnp(pyxel.KEY_DOWN) or pyxel.btnp(pyxel.KEY_S):
@@ -501,6 +504,9 @@ class GameState:
         self.game = game  # Referência para o objeto principal do jogo
         self.is_multiplayer = is_multiplayer  # Flag para modo multiplayer
         self.is_host = is_host  # Flag para identificar se é o host
+        
+        # Toca a musica do jogo
+        music.play_game_music()
 
         # Fim de jogo
         self.death_delay = False        # Verifica se estah aguardando para entrar no game over 
@@ -508,6 +514,9 @@ class GameState:
         self.game_over = False          # flag de fim de jogo
         self.game_over_timer = 0        # temporizador em frames
 
+        # Fila de sons que a instancia vai enviar ao outro (cliente para servidor ou servidor para cliente)
+        self.pending_sounds = []  
+        
         # Posicionamento inicial dos jogadores (host vs cliente)
         if is_host:
             # Host controla jogador 1 (esquerda)
@@ -599,6 +608,8 @@ class GameState:
                 self.death_delay      = False
                 self.game_over        = True
                 self.game_over_timer  = 5 * FPS   # 5 segundos de tela preta
+                pyxel.play(0, 1) # Som de fim de jogo
+                
 
         # Lógica de pausa
         if pyxel.btnp(pyxel.KEY_ESCAPE):
@@ -617,11 +628,22 @@ class GameState:
             if pyxel.btn(pyxel.KEY_S):
                 self.player_y += PLAYER_SPEED  # Move para baixo
             # Disparo: cria um tiro quando apertar SPACE
-            if pyxel.btnp(pyxel.KEY_SPACE):
-                # inicia no centro horizontal do avião, um pouco acima dele
-                shot_x = self.player_x + PLAYER_WIDTH // 2 - 1
-                shot_y = self.player_y
-                self.shots.append(Shot(shot_x, shot_y))
+            if pyxel.btnp(pyxel.KEY_SPACE) and (not self.death_delay and not self.game_over):
+                if (self.is_host or not self.is_multiplayer) and self.life_player1 > 0:
+                    # inicia no centro horizontal do avião, um pouco acima dele
+                    shot_x = self.player_x + PLAYER_WIDTH // 2 - 1
+                    shot_y = self.player_y
+                    self.shots.append(Shot(shot_x, shot_y))
+                    pyxel.play(0, 0) # Som de tiro
+                    self.pending_sounds.append((0, 0)) # Envia para Cliente/Servidor o som de tiro
+                elif not self.is_host and self.life_player2 > 0:
+                    # inicia no centro horizontal do avião, um pouco acima dele
+                    shot_x = self.player_x + PLAYER_WIDTH // 2 - 1
+                    shot_y = self.player_y
+                    self.shots.append(Shot(shot_x, shot_y))
+                    pyxel.play(0, 0) # Som de tiro
+                    self.pending_sounds.append((0, 0)) # Envia para Cliente/Servidor o som de tiro
+
 
         # Limites da tela
         self.player_x = max(0, min(self.player_x, SCREEN_WIDTH - PLAYER_WIDTH))
@@ -682,6 +704,9 @@ class GameState:
                 if colisoes > 0:
                     self.life_player1 = max(0, self.life_player1 - 1)  # Perde vida 
                     self.invincible_timer_j1 = self.INVINCIBILITY_DURATION  # Ativa invencibilidade
+                    if not self.death_delay and not self.game_over and self.life_player1 > 0:
+                        pyxel.play(1, 2) # Som de colisao
+                        self.pending_sounds.append((1, 2)) # Envia para Cliente o som
 
             # Lógica do cliente para jogador 2
             elif not self.is_host and self.invincible_timer_j2 <= 0:
@@ -693,6 +718,9 @@ class GameState:
                 if colisoes > 0:
                     self.life_player2 = max(0, self.life_player2 - 1)  # Perde vida
                     self.invincible_timer_j2 = self.INVINCIBILITY_DURATION  # Ativa invencibilidade
+                    if not self.death_delay and not self.game_over and self.life_player2 > 0:
+                        pyxel.play(1, 2) # Som de colisao
+                        self.pending_sounds.append((1, 2)) # Envia para Cliente o som
         else:
             # Lógica singleplayer
             if self.invincible_timer_j1 <= 0:
@@ -704,6 +732,8 @@ class GameState:
                 if colisoes > 0:
                     self.life_player1 = max(0, self.life_player1 - 1)  # Perde vida
                     self.invincible_timer_j1 = self.INVINCIBILITY_DURATION  # Ativa invencibilidade
+                    if self.life_player1 > 0:
+                        pyxel.play(1, 2) # Som de colisao
         
         ## ————— Colisão Tiro × Árvore (host destrói; ambos removem tiro no primeiro hit) —————
         for shot_list in (self.shots, self.remote_shots):
@@ -736,9 +766,15 @@ class GameState:
                             self.explosions.append(
                                 Explosion(cx, cy, 16, 16, 16, 16, duration=8)
                             )
+
+                            pyxel.play(2, 3) # Som de colisao de tiro
+                            if self.is_multiplayer:
+                                self.pending_sounds.append((2, 3)) # Envia para Cliente o som
                         else:
                             # Cliente destruiu uma arvore, aumenta a pontuacao
                             self.score_player2 += 2
+                            pyxel.play(2, 3) # Som de colisao
+                            self.pending_sounds.append((2, 3)) # Envia para Host o som
                         # qualquer um remove o tiro no primeiro contato
                         shot_list.remove(shot)
                         hit = True
@@ -781,9 +817,15 @@ class GameState:
                             self.explosions.append(
                                 Explosion(cx, cy, 16, 16, 16, 16, duration=8)
                             )
+
+                            pyxel.play(2, 4) # Som de colisao de tiro
+                            if self.is_multiplayer:
+                                self.pending_sounds.append((2, 4)) # Envia para Cliente o som
                         else:
                             # Cliente destruiu um barco, aumenta a pontuacao
                             self.score_player2 += 4
+                            pyxel.play(2, 4) # Som de colisao de tiro
+                            self.pending_sounds.append((2, 4)) # Envia para Cliente o som
                         # em qualquer caso, remove o tiro no primeiro hit
                         shot_list.remove(shot)
                         break
@@ -804,7 +846,11 @@ class GameState:
                         # colisão: perde vida e fica invencível
                         self.life_player1 = max(0, self.life_player1 - 1)
                         self.invincible_timer_j1 = self.INVINCIBILITY_DURATION
-                        break
+                        if not self.death_delay and not self.game_over and self.life_player1 > 0:
+                            pyxel.play(1, 2) # Som de colisao
+                            if self.is_multiplayer:
+                                self.pending_sounds.append((1, 2)) # Envia para Cliente o som
+                            break
         # Jogador 2 (cliente)  
         if not self.is_host and self.invincible_timer_j2 <= 0:
             for boat in self.remote_boats:
@@ -818,6 +864,9 @@ class GameState:
                         j_bottom > top   and j_top < bottom):
                         self.life_player2 = max(0, self.life_player2 - 1)
                         self.invincible_timer_j2 = self.INVINCIBILITY_DURATION
+                        if not self.death_delay and not self.game_over and self.life_player2 > 0:
+                            pyxel.play(1, 2) # Som de colisao
+                            self.pending_sounds.append((1, 2)) # Envia para Cliente o som
                         break
         
         # Jogador 1 morreu?
@@ -832,6 +881,9 @@ class GameState:
                 Explosion(cx, cy, 16, 16, 16, 16, duration=30)
             )
 
+            pyxel.play(1, 2) # Som de explosao
+            self.pending_sounds.append((1, 2)) # Envia para Cliente o som
+
         # Jogador 2 morreu?
         if self.is_multiplayer and self.life_player2 == 0 and not getattr(self, "_exploded_j2", False):
             self._exploded_j2 = True
@@ -843,16 +895,21 @@ class GameState:
                 Explosion(cx, cy, 16, 16, 16, 16, duration=30)
             )
 
+            pyxel.play(1, 2) # Som de explosao
+            self.pending_sounds.append((1, 2)) # Envia para Cliente o som
+
         # Fim de jogo:
         # Condição SINGLEPLAYER
         if not self.is_multiplayer and self.life_player1 == 0 and not self.death_delay:
             self.death_delay = True
             self.death_delay_timer = 2 * FPS   # 2 segundos de delay
+            music.stop_music() # Para a musica
 
         # Condição MULTIPLAYER
         elif self.is_multiplayer and self.life_player1 == 0 and (not self.game.network.connected or self.life_player2 == 0) and not self.death_delay:
             self.death_delay = True
             self.death_delay_timer = 2 * FPS    # 2 segundos de delay
+            music.stop_music() # Para a musica
 
        
 
@@ -885,7 +942,8 @@ class GameState:
                     'boats': self.boat_manager.get_states(),
                     'player_type': 'host',
                     'fuel': self.fuel_player1,
-                    'lives': self.life_player1
+                    'lives': self.life_player1,
+                    "sounds": self.pending_sounds,
                 }
             else:
                 data = {
@@ -901,8 +959,11 @@ class GameState:
                     'boats': self.boat_manager.get_states(),
                     'player_type': 'client',
                     'fuel': self.fuel_player2,
-                    'lives': self.life_player2
+                    'lives': self.life_player2,
+                    "sounds": self.pending_sounds,
                 }
+
+            self.pending_sounds = []  # limpa a fila de sons
                                 
             self.game.network.send(data)  # Envia os dados
 
@@ -943,16 +1004,25 @@ class GameState:
                         # Pega gasolina e vida se o host recebe um pacote do cliente
                         if data.get('player_type', -1) == 'client':
                             self.fuel_player2 = data.get('fuel', self.fuel_player2)
-                            self.life_player2 = data.get('lives', self.life_player2) 
+                            self.life_player2 = data.get('lives', self.life_player2)
+                            # Toca os sons recebidos pelo cliente (se tiver)
+                            for channel, sound_id in data.get("sounds", []): 
+                                pyxel.play(channel, sound_id)
+                        
                         # Verifica se esta instância é o host (jogador 1)
                         self.invincible_timer_j2 = data.get('invincible', 0)
                         # Host recebe o timer de invencibilidade do cliente (jogador 2)
                         # Usa .get() para evitar KeyError, retornando 0 se 'invincible' não existir
+                    
                     else:
                         # Pega gasolina e vida se o cliente recebe um pacote do host
                         if data.get('player_type', -1) == 'host':
                             self.fuel_player1 = data.get('fuel', self.fuel_player1)
                             self.life_player1 = data.get('lives', self.life_player1)
+                            # Toca os sons recebidos pelo host (se tiver)
+                            for channel, sound_id in data.get("sounds", []): 
+                                pyxel.play(channel, sound_id)
+
                         # Caso contrário (se for o cliente)
                         self.invincible_timer_j1 = data.get('invincible', 0)
                         # Cliente recebe o timer de invencibilidade do host (jogador 1)

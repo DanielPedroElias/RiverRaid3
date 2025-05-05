@@ -35,3 +35,6 @@ O **WebSocket** é um protocolo que permite uma comunicação **contínua e bidi
 ## Jogo Escolhido
 
 O jogo será uma **inspiração no clássico *[River Raid](https://pt.wikipedia.org/wiki/River_Raid)***, adaptado para atender todos os requisitos mencionados.
+
+### Musicas
+Os sons foram criados com a biblioteca do pyxel para música, enquanto as musicas foram feitas utilizando o [gerador de musicas de fundo 8 bit](https://github.com/shiromofufactory/8bit-bgm-generator), utilizando o módulo de música do pygame.
