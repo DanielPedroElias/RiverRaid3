@@ -421,56 +421,79 @@ class HostGameState:
 class PauseMenuState:
     # Método de inicialização
     def __init__(self, game):
-        self.game = game  # Referência para o objeto principal do jogo
-        self.selected = 0  # Opção selecionada no menu (0 = Continuar, 1 = Menu Principal)
-        self.options = ["Continuar", "Menu Principal"]  # Opções do menu
+        self.game = game
+        self.selected = 0
+        self.options = ["Continuar", "Menu Principal"]
 
     # Método para atualizar o estado a cada frame
     def update(self):
+        # Só faz sentido em cima de um GameState
+        if not isinstance(self.game.previous_state, GameState):
+            return
 
-        # Mantém a atualização do cenário mesmo durante o pause
-        if isinstance(self.game.previous_state, GameState):
-            self.game.previous_state.background.update()  # ← Adicione esta linha
+        gs = self.game.previous_state
+        if gs.invincible_timer_j1 > 0:
+            gs.invincible_timer_j1 -= 1
+        if gs.invincible_timer_j2 > 0:
+            gs.invincible_timer_j2 -= 1
 
-        # Se estava em jogo multiplayer, mantém a rede ativa
-        if isinstance(self.game.previous_state, GameState) and self.game.previous_state.is_multiplayer:
-            self.game.previous_state.send_data()  # Continua enviando dados
-            self.game.previous_state.receive_data()  # Continua recebendo dados
-        # Atualiza os tiros mesmo em pause
-        if isinstance(self.game.previous_state, GameState):
-            self.game.previous_state.update_shots()
-        
-        # Navegação pelo menu com teclas DOWN/S ou UP/W
+        # 1) mantém o scroll do rio
+        gs.background.update()
+
+        # 2) rede continua ativa em multiplayer
+        if gs.is_multiplayer:
+            gs.send_data()
+            gs.receive_data()
+
+        # 3) tiros continuam voando
+        gs.update_shots()
+
+        # 4) barcos continuam navegando (apenas UMA chamada)
+        gs.boat_manager.update()
+
+        # 5) colisões continuam sendo testadas
+        gs.check_all_collisions()
+
+        # 6) explosões continuam animando
+        for exp in gs.explosions:
+            exp.update()
+        gs.explosions = [e for e in gs.explosions if not e.is_dead()]
+
+        for exp in gs.remote_explosions:
+            exp.update()
+        gs.remote_explosions = [e for e in gs.remote_explosions if not e.is_dead()]
+
+        # 7) navegação do menu de pause
         if pyxel.btnp(pyxel.KEY_DOWN) or pyxel.btnp(pyxel.KEY_S):
-            self.selected = (self.selected + 1) % 2  # Alterna entre opções
+            self.selected = (self.selected + 1) % len(self.options)
         elif pyxel.btnp(pyxel.KEY_UP) or pyxel.btnp(pyxel.KEY_W):
-            self.selected = (self.selected - 1) % 2  # Alterna entre opções
-            
-        # Confirmação com ENTER
+            self.selected = (self.selected - 1) % len(self.options)
+
+        # 8) confirmação de opção
         if pyxel.btnp(pyxel.KEY_RETURN):
             if self.selected == 0:  # Continuar
-                self.game.change_state(self.game.previous_state)  # Volta ao jogo
+                self.game.change_state(gs)
             else:  # Menu Principal
-                # Se estava em multiplayer, encerra a conexão
-                if isinstance(self.game.previous_state, GameState) and self.game.previous_state.is_multiplayer:
+                if gs.is_multiplayer:
                     self.game.network.stop()
-                # Volta ao menu principal
                 self.game.change_state(MenuState(self.game))
-        
-        # Se pressionar ESC, também volta ao jogo (atalho para Continuar)
+
+        # atalho Esc = Continuar
         if pyxel.btnp(pyxel.KEY_ESCAPE):
-            self.game.change_state(self.game.previous_state)
-    
+            self.game.change_state(gs)
+
     # Método para desenhar o menu
     def draw(self):
         pyxel.cls(COLOR_BG)  # Limpa a tela
         pyxel.text(50, 40, "Jogo Pausado", COLOR_TEXT)  # Título
 
+        
         # Desenha as opções do menu
         for i, opt in enumerate(self.options):
             # Define a cor (destaque para opção selecionada)
             color = COLOR_TEXT if i != self.selected else COLOR_TEXT_HIGHLIGHT
             pyxel.text(50, 60 + (i*20), opt, color)  # Desenha cada opção
+
 
 
 # Importa estrutura de dados deque
@@ -1120,7 +1143,79 @@ class Background:
         self.animating_to_center = False
         self.max_largura = pyxel.width - 30  # Largura máxima igual ao KEY_3
 
-        
+        self.comandos = deque([
+            ("KEY_1", 1),   # ← só 1 frame pressionado
+            ("WAIT", 150),
+            ("KEY_1", 1),
+            ("WAIT", 150),
+            ("KEY_3", 1),
+            ("WAIT", 300),
+            ("KEY_2", 1),
+            ("WAIT", 150),
+            ("KEY_2", 1),
+            ("WAIT", 150),
+            ("KEY_2", 1),
+            ("WAIT", 150),
+            ("KEY_2", 1),
+            ("WAIT", 150),
+            ("KEY_2", 1),
+            ("WAIT", 150),
+            ("KEY_4", 1),
+            ("WAIT", 300),
+            ("KEY_4", 1),
+            ("WAIT", 300),
+            ("KEY_4", 1),
+            ("WAIT", 300),
+            ("KEY_1", 1),
+            ("WAIT", 60),
+            ("KEY_1", 1),
+            ("WAIT", 60),
+            ("KEY_1", 1),
+            ("WAIT", 60),
+            ("KEY_2", 1),
+            ("WAIT", 60),
+            ("KEY_1", 1),
+            ("WAIT", 60),
+            ("KEY_2", 1),
+            ("WAIT", 60),
+            ("KEY_1", 1),
+            ("WAIT", 60),
+            ("KEY_2", 1),
+            ("WAIT", 60),
+            ("KEY_5", 1),
+            ("WAIT", 120),
+        ])
+        self.tempo_comando = 0
+
+    def executar_comando_simulado(self):
+        if not self.comandos:
+            return
+
+        comando, duracao = self.comandos[0]
+
+        if comando == "WAIT":
+            self.tempo_comando += 1
+            if self.tempo_comando >= duracao:
+                self.comandos.popleft()
+                self.tempo_comando = 0
+        else:
+            # Executa o comando por 1 frame
+            if comando == "KEY_1":
+                self.target_centro_x = min(self.target_centro_x + 30, pyxel.width - self.largura_rio / 2)
+            elif comando == "KEY_2":
+                self.target_centro_x = max(self.target_centro_x - 30, self.largura_rio / 2)
+            elif comando == "KEY_3":
+                self.target_largura = min(self.target_largura + 10, self.max_largura)
+            elif comando == "KEY_4":
+                self.target_largura = max(self.target_largura - 10, 20)
+            elif comando == "KEY_5":
+                self.animating_to_center = True
+                self.target_centro_x = pyxel.width / 2
+                self.target_largura = 45
+
+            # Remove imediatamente após 1 frame
+            self.comandos.popleft()
+            self.tempo_comando = 0
 
     def obter_margens_rio(self, screen_y):
         centro = self.centros_hist[screen_y]
@@ -1162,6 +1257,8 @@ class Background:
                 self.target_centro_x = pyxel.width / 2  # Primeiro centraliza
                 self.target_largura = 45  # Reset para largura inicial
                 
+
+            self.executar_comando_simulado()
 
             # atualiza árvores
             self.tree_manager.update_arvores(self.velocidade_scroll)
