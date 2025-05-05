@@ -455,6 +455,8 @@ class PauseMenuState:
             # 4) barcos continuam navegando (apenas UMA chamada)
             gs.boat_manager.update()
 
+            # bombas de combustivle continuam caindo
+            gs.bomb_manager.update()
             # 5) colisões continuam sendo testadas
             gs.check_all_collisions()
 
@@ -708,118 +710,118 @@ class GameState:
             # ----- Host processa colisões para os dois jogadores -----
             if self.is_host:
                 # Jogador 1
-                if self.invincible_timer_j1 <= 0:
-                    colisoes = check_tree_collision(
+                if self.invincible_timer_j1 <= 0:  # Verifica se o jogador 1 não está invencível
+                    colisoes = check_tree_collision(  # Verifica colisão do jogador 1 com as árvores
                         self.player_x, self.player_y,
                         self.background.tree_manager.arvores,
                         "Jogador 1"
                     )
-                    if colisoes > 0:
-                        self.life_player1 = max(0, self.life_player1 - 1)
-                        self.invincible_timer_j1 = self.INVINCIBILITY_DURATION
-                        if not self.death_delay and not self.game_over and self.life_player1 > 0:
-                            pyxel.play(1, 2)
-                            self.pending_sounds.append((1, 2))
+                    if colisoes > 0:  # Se houve colisão
+                        self.life_player1 = max(0, self.life_player1 - 1)  # Reduz a vida do jogador 1
+                        self.invincible_timer_j1 = self.INVINCIBILITY_DURATION  # Ativa o timer de invencibilidade
+                        if not self.death_delay and not self.game_over and self.life_player1 > 0:  # Se não está em game over e ainda tem vidas
+                            pyxel.play(1, 2)  # Toca o som de colisão
+                            self.pending_sounds.append((1, 2))  # Adiciona o som na fila de sons pendentes
 
-                for boat in self.boat_manager.boats:
-                    if boat.visible and self.invincible_timer_j1 <= 0:
-                        left, top, right, bottom = boat.hitbox
-                        j_left = self.player_x
+                for boat in self.boat_manager.boats:  # Itera sobre os barcos
+                    if boat.visible and self.invincible_timer_j1 <= 0:  # Verifica se o barco está visível e o jogador 1 não está invencível
+                        left, top, right, bottom = boat.hitbox  # Obtém a hitbox do barco
+                        j_left = self.player_x  # Calcula a hitbox do jogador 1
                         j_right = self.player_x + PLAYER_WIDTH
                         j_top = self.player_y
                         j_bottom = self.player_y + PLAYER_HEIGHT
-                        if (j_right > left and j_left < right and
+                        if (j_right > left and j_left < right and  # Verifica colisão entre o jogador 1 e o barco
                             j_bottom > top and j_top < bottom):
-                            self.life_player1 = max(0, self.life_player1 - 1)
-                            self.invincible_timer_j1 = self.INVINCIBILITY_DURATION
-                            if not self.death_delay and not self.game_over and self.life_player1 > 0:
-                                pyxel.play(1, 2)
-                                self.pending_sounds.append((1, 2))
-                            break
+                            self.life_player1 = max(0, self.life_player1 - 1)  # Reduz a vida do jogador 1
+                            self.invincible_timer_j1 = self.INVINCIBILITY_DURATION  # Ativa o timer de invencibilidade
+                            if not self.death_delay and not self.game_over and self.life_player1 > 0:  # Se não está em game over e ainda tem vidas
+                                pyxel.play(1, 2)  # Toca o som de colisão
+                                self.pending_sounds.append((1, 2))  # Adiciona o som na fila de sons pendentes
+                            break  # Sai do loop
 
                 # Jogador 2 (posição recebida do cliente)
-                if self.invincible_timer_j2 <= 0:
-                    colisoes2 = check_tree_collision(
+                if self.invincible_timer_j2 <= 0:  # Verifica se o jogador 2 não está invencível
+                    colisoes2 = check_tree_collision(  # Verifica colisão do jogador 2 com as árvores
                         self.player2_x, self.player2_y,
                         self.background.tree_manager.arvores,
                         "Jogador 2"
                     )
-                    if colisoes2 > 0:
-                        self.life_player2 = max(0, self.life_player2 - 1)
-                        self.invincible_timer_j2 = self.INVINCIBILITY_DURATION
-                        if not self.death_delay and not self.game_over and self.life_player2 > 0:
-                            self.pending_sounds.append((1, 2))
+                    if colisoes2 > 0:  # Se houve colisão
+                        self.life_player2 = max(0, self.life_player2 - 1)  # Reduz a vida do jogador 2
+                        self.invincible_timer_j2 = self.INVINCIBILITY_DURATION  # Ativa o timer de invencibilidade
+                        if not self.death_delay and not self.game_over and self.life_player2 > 0:  # Se não está em game over e ainda tem vidas
+                            self.pending_sounds.append((1, 2))  # Adiciona o som na fila de sons pendentes
 
-                for boat in self.boat_manager.boats:
-                    if boat.visible and self.invincible_timer_j2 <= 0:
-                        left, top, right, bottom = boat.hitbox
-                        j_left = self.player2_x
+                for boat in self.boat_manager.boats:  # Itera sobre os barcos
+                    if boat.visible and self.invincible_timer_j2 <= 0:  # Verifica se o barco está visível e o jogador 2 não está invencível
+                        left, top, right, bottom = boat.hitbox  # Obtém a hitbox do barco
+                        j_left = self.player2_x  # Calcula a hitbox do jogador 2
                         j_right = self.player2_x + PLAYER_WIDTH
                         j_top = self.player2_y
                         j_bottom = self.player2_y + PLAYER_HEIGHT
-                        if (j_right > left and j_left < right and
+                        if (j_right > left and j_left < right and  # Verifica colisão entre o jogador 2 e o barco
                             j_bottom > top and j_top < bottom):
-                            self.life_player2 = max(0, self.life_player2 - 1)
-                            self.invincible_timer_j2 = self.INVINCIBILITY_DURATION
-                            if not self.death_delay and not self.game_over and self.life_player2 > 0:
-                                self.pending_sounds.append((1, 2))
-                            break
+                            self.life_player2 = max(0, self.life_player2 - 1)  # Reduz a vida do jogador 2
+                            self.invincible_timer_j2 = self.INVINCIBILITY_DURATION  # Ativa o timer de invencibilidade
+                            if not self.death_delay and not self.game_over and self.life_player2 > 0:  # Se não está em game over e ainda tem vidas
+                                self.pending_sounds.append((1, 2))  # Adiciona o som na fila de sons pendentes
+                            break  # Sai do loop
 
             # ----- Cliente apenas toca som local e gerencia timers -----
             else:
-                if self.invincible_timer_j2 <= 0:
-                    colisoes = check_tree_collision(
+                if self.invincible_timer_j2 <= 0:  # Verifica se o jogador 2 não está invencível
+                    colisoes = check_tree_collision(  # Verifica colisão do jogador 2 com as árvores
                         self.player_x, self.player_y,
                         self.background.tree_manager.arvores,
                         "Jogador 2"
                     )
-                    if colisoes > 0:
-                        self.invincible_timer_j2 = self.INVINCIBILITY_DURATION
-                        if not self.death_delay and not self.game_over and self.life_player2 > 0:
-                            pyxel.play(1, 2)
+                    if colisoes > 0:  # Se houve colisão
+                        self.invincible_timer_j2 = self.INVINCIBILITY_DURATION  # Ativa o timer de invencibilidade
+                        if not self.death_delay and not self.game_over and self.life_player2 > 0:  # Se não está em game over e ainda tem vidas
+                            pyxel.play(1, 2)  # Toca o som de colisão
 
-                for boat in self.remote_boats:
-                    if boat.visible and self.invincible_timer_j2 <= 0:
-                        left, top, right, bottom = boat.hitbox
-                        j_left = self.player_x
+                for boat in self.remote_boats:  # Itera sobre os barcos remotos
+                    if boat.visible and self.invincible_timer_j2 <= 0:  # Verifica se o barco está visível e o jogador 2 não está invencível
+                        left, top, right, bottom = boat.hitbox  # Obtém a hitbox do barco
+                        j_left = self.player_x  # Calcula a hitbox do jogador 2
                         j_right = self.player_x + PLAYER_WIDTH
                         j_top = self.player_y
                         j_bottom = self.player_y + PLAYER_HEIGHT
-                        if (j_right > left and j_left < right and
+                        if (j_right > left and j_left < right and  # Verifica colisão entre o jogador 2 e o barco
                             j_bottom > top and j_top < bottom):
-                            self.invincible_timer_j2 = self.INVINCIBILITY_DURATION
-                            if not self.death_delay and not self.game_over and self.life_player2 > 0:
-                                pyxel.play(1, 2)
-                            break
+                            self.invincible_timer_j2 = self.INVINCIBILITY_DURATION  # Ativa o timer de invencibilidade
+                            if not self.death_delay and not self.game_over and self.life_player2 > 0:  # Se não está em game over e ainda tem vidas
+                                pyxel.play(1, 2)  # Toca o som de colisão
+                            break  # Sai do loop
 
         # ----- Modo singleplayer -----
         else:
-            if self.invincible_timer_j1 <= 0:
-                colisoes = check_tree_collision(
+            if self.invincible_timer_j1 <= 0:  # Verifica se o jogador 1 não está invencível
+                colisoes = check_tree_collision(  # Verifica colisão do jogador 1 com as árvores
                     self.player_x, self.player_y,
                     self.background.tree_manager.arvores,
                     "Jogador 1"
                 )
-                if colisoes > 0:
-                    self.life_player1 = max(0, self.life_player1 - 1)
-                    self.invincible_timer_j1 = self.INVINCIBILITY_DURATION
-                    if self.life_player1 > 0:
-                        pyxel.play(1, 2)
+                if colisoes > 0:  # Se houve colisão
+                    self.life_player1 = max(0, self.life_player1 - 1)  # Reduz a vida do jogador 1
+                    self.invincible_timer_j1 = self.INVINCIBILITY_DURATION  # Ativa o timer de invencibilidade
+                    if self.life_player1 > 0:  # Se ainda tem vidas
+                        pyxel.play(1, 2)  # Toca o som de colisão
 
-            for boat in self.boat_manager.boats:
-                if boat.visible and self.invincible_timer_j1 <= 0:
-                    left, top, right, bottom = boat.hitbox
-                    j_left = self.player_x
+            for boat in self.boat_manager.boats:  # Itera sobre os barcos
+                if boat.visible and self.invincible_timer_j1 <= 0:  # Verifica se o barco está visível e o jogador 1 não está invencível
+                    left, top, right, bottom = boat.hitbox  # Obtém a hitbox do barco
+                    j_left = self.player_x  # Calcula a hitbox do jogador 1
                     j_right = self.player_x + PLAYER_WIDTH
                     j_top = self.player_y
                     j_bottom = self.player_y + PLAYER_HEIGHT
-                    if (j_right > left and j_left < right and
+                    if (j_right > left and j_left < right and  # Verifica colisão entre o jogador 1 e o barco
                         j_bottom > top and j_top < bottom):
-                        self.life_player1 = max(0, self.life_player1 - 1)
-                        self.invincible_timer_j1 = self.INVINCIBILITY_DURATION
-                        if self.life_player1 > 0:
-                            pyxel.play(1, 2)
-                        break
+                        self.life_player1 = max(0, self.life_player1 - 1)  # Reduz a vida do jogador 1
+                        self.invincible_timer_j1 = self.INVINCIBILITY_DURATION  # Ativa o timer de invencibilidade
+                        if self.life_player1 > 0:  # Se ainda tem vidas
+                            pyxel.play(1, 2)  # Toca o som de colisão
+                        break  # Sai do loop
         
         ## ————— Colisão Tiro × Árvore (host destrói; ambos removem tiro no primeiro hit) —————
         for shot_list in (self.shots, self.remote_shots):
