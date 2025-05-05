@@ -429,6 +429,10 @@ class PauseMenuState:
             return
 
         gs = self.game.previous_state
+        if gs.invincible_timer_j1 > 0:
+            gs.invincible_timer_j1 -= 1
+        if gs.invincible_timer_j2 > 0:
+            gs.invincible_timer_j2 -= 1
 
         # 1) mantém o scroll do rio
         gs.background.update()
