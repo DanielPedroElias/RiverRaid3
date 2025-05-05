@@ -349,7 +349,7 @@ class BoatManager:
 
     def update(self):
         # cria novos barcos se host e houver slot
-        if self.background.is_host:
+        if (self.background.is_host or not self.background.is_multiplayer):
             self.timer += 1
             if self.timer >= self.spawn_interval and len(self.boats) < self.max_boats:
                 self.timer = 0
@@ -364,7 +364,7 @@ class BoatManager:
         for boat in self.boats.copy():
             if boat.y > pyxel.height:
                 # respawn como novo barco
-                if self.background.is_host:
+                if (self.background.is_host or not self.background.is_multiplayer):
                     self.boats.remove(boat)
 
     def draw(self):
