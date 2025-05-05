@@ -8,7 +8,7 @@ from time import sleep
 import pyxel            # Engine do jogo
 from config import *    # Importa constantes e configuracoes do arquivo "config.py"
 from entities import *  # Importa as classes de entidades do jogo (jogador, arvores, etc.)
-from collections import deque
+from map_generator import Background
 
 # Classe para o Menu Principal do jogo
 class MenuState:
@@ -494,11 +494,6 @@ class PauseMenuState:
             color = COLOR_TEXT if i != self.selected else COLOR_TEXT_HIGHLIGHT
             pyxel.text(50, 60 + (i*20), opt, color)  # Desenha cada opção
 
-
-
-# Importa estrutura de dados deque
-from collections import deque
-
 # Classe principal que gerencia o estado do jogo (singleplayer/multiplayer)
 class GameState:
     # Método de inicialização
@@ -507,17 +502,23 @@ class GameState:
         self.is_multiplayer = is_multiplayer  # Flag para modo multiplayer
         self.is_host = is_host  # Flag para identificar se é o host
 
+        # Fim de jogo
+        self.death_delay = False        # Verifica se estah aguardando para entrar no game over 
+        self.death_delay_timer = 0      # quantos frames faltam para o delay de morte acabar
+        self.game_over = False          # flag de fim de jogo
+        self.game_over_timer = 0        # temporizador em frames
+
         # Posicionamento inicial dos jogadores (host vs cliente)
         if is_host:
             # Host controla jogador 1 (esquerda)
-            self.player_x, self.player_y = 55, 144  
+            self.player_x, self.player_y = 55, 130  
             # Jogador 2 (cliente) começa à direita
-            self.player2_x, self.player2_y = 90, 144  
+            self.player2_x, self.player2_y = 90, 130  
         else:
             # Cliente controla jogador 2 (direita)
-            self.player_x, self.player_y = 90, 144  
+            self.player_x, self.player_y = 90, 130
             # Jogador 1 (host) começa à esquerda
-            self.player2_x, self.player2_y = 55, 144  
+            self.player2_x, self.player2_y = 55, 130  
 
         # Inicializa o cenário de fundo
         self.background = Background(is_host=is_host , is_multiplayer=is_multiplayer) 
@@ -530,6 +531,8 @@ class GameState:
         self.invincible_timer_j1 = 0  # Temporizador de invencibilidade do jogador 1
         self.invincible_timer_j2 = 0  # Temporizador de invencibilidade do jogador 2
         self.INVINCIBILITY_DURATION = 90  # Duração em frames (1.5s a 60FPS)
+        self.score_player1 = 0  # Pontuação do jogador 1
+        self.score_player2 = 0  # Pontuação do jogador 2
 
         # Sincronização inicial do jogo (apenas multiplayer)
         if initial_seed:
@@ -562,9 +565,6 @@ class GameState:
 
 
 
-
-        
-
     def _collide_player(self, hitbox, px, py):
         left, top, right, bottom = hitbox
         return (px+PLAYER_WIDTH>left and px<right and
@@ -572,9 +572,6 @@ class GameState:
     
     # Método para atualizar o estado do jogo a cada frame
     def update(self):
-        ##self.background.update()  # Atualiza o cenário
-
-
         # Apenas atualiza a lógica do jogo se não estiver em pause
         if not isinstance(self.game.current_state, PauseMenuState):
             self.background.update()  # ← Movido para fora da verificação de pause
@@ -583,6 +580,25 @@ class GameState:
         if self.is_multiplayer:
             self.send_data()  # Envia dados do jogador local
             self.receive_data()  # Recebe dados do outro jogador
+
+        # Se estiver em Game Over, apenas decrementa o timer
+        if self.game_over:
+            self.game_over_timer -= 1
+            if self.game_over_timer <= 0:
+                # volta ao menu principal
+                self.game.network.stop()  # Encerra a conexao
+                self.game.change_state(MenuState(self.game))
+            return
+        
+        # Se estiver no “delay de morte”, decrementa o seu timer,
+        # mas continuar rodando o jogo normalmente ateh acabar o timer:
+        if self.death_delay:
+            self.death_delay_timer -= 1
+            if self.death_delay_timer <= 0:
+                # passado o delay, o Game Over eh ativado
+                self.death_delay      = False
+                self.game_over        = True
+                self.game_over_timer  = 5 * FPS   # 5 segundos de tela preta
 
         # Lógica de pausa
         if pyxel.btnp(pyxel.KEY_ESCAPE):
@@ -618,7 +634,6 @@ class GameState:
         # Atualizacao para o modo Singleplayer da gasolina:
         if not self.is_multiplayer:
             self.fuel_player1 = max(0, self.fuel_player1 - consumption_per_frame) # Decrementa, garantindo que nunca fique negativo
-
         if self.is_host:
             self.fuel_player1 = max(0, self.fuel_player1 - consumption_per_frame) # Decrementa, garantindo que nunca fique negativo
         else:
@@ -711,14 +726,19 @@ class GameState:
                         s_bottom > top and s_top < bottom):
                         # host marca a árvore como destruída
                         if (self.is_host or not self.is_multiplayer):
-                            
                             tree.visible = False
+
+                            # Host destruiu uma arvore, aumenta a pontuacao
+                            self.score_player1 += 2
                             # cria explosão no centro da árvore
                             cx = (left + right) // 2 - 16 // 2
                             cy = (top  + bottom) // 2 - 16 // 2
                             self.explosions.append(
                                 Explosion(cx, cy, 16, 16, 16, 16, duration=8)
-)
+                            )
+                        else:
+                            # Cliente destruiu uma arvore, aumenta a pontuacao
+                            self.score_player2 += 2
                         # qualquer um remove o tiro no primeiro contato
                         shot_list.remove(shot)
                         hit = True
@@ -752,12 +772,18 @@ class GameState:
                         # host é fonte da verdade: destrói o barco
                         if (self.is_host or not self.is_multiplayer):
                             boat.visible = False
+
+                            # Host destruiu um barco, aumenta a pontuacao
+                            self.score_player1 += 4
                             # spawn de explosão no centro do barco
                             cx = (b_left + b_right)//2 - 8   # metade de 16px
                             cy = (b_top  + b_bottom)//2 - 8
                             self.explosions.append(
                                 Explosion(cx, cy, 16, 16, 16, 16, duration=8)
                             )
+                        else:
+                            # Cliente destruiu um barco, aumenta a pontuacao
+                            self.score_player2 += 4
                         # em qualquer caso, remove o tiro no primeiro hit
                         shot_list.remove(shot)
                         break
@@ -793,6 +819,40 @@ class GameState:
                         self.life_player2 = max(0, self.life_player2 - 1)
                         self.invincible_timer_j2 = self.INVINCIBILITY_DURATION
                         break
+        
+        # Jogador 1 morreu?
+        if self.life_player1 == 0 and not getattr(self, "_exploded_j1", False) and (self.is_host or not self.is_multiplayer):
+            # marca que já acionou explosão
+            self._exploded_j1 = True
+            # centro do avião 1
+
+            cx = self.player_x + PLAYER_WIDTH//2 - 8
+            cy = self.player_y + PLAYER_HEIGHT//2 - 8
+            self.explosions.append(
+                Explosion(cx, cy, 16, 16, 16, 16, duration=30)
+            )
+
+        # Jogador 2 morreu?
+        if self.is_multiplayer and self.life_player2 == 0 and not getattr(self, "_exploded_j2", False):
+            self._exploded_j2 = True
+            # posição do avião 2 depende se host ou client
+            px, py = (self.player2_x, self.player2_y) if self.is_host else (self.player_x, self.player_y)
+            cx = px + PLAYER_WIDTH//2 - 8
+            cy = py + PLAYER_HEIGHT//2 - 8
+            self.explosions.append(
+                Explosion(cx, cy, 16, 16, 16, 16, duration=30)
+            )
+
+        # Fim de jogo:
+        # Condição SINGLEPLAYER
+        if not self.is_multiplayer and self.life_player1 == 0 and not self.death_delay:
+            self.death_delay = True
+            self.death_delay_timer = 2 * FPS   # 2 segundos de delay
+
+        # Condição MULTIPLAYER
+        elif self.is_multiplayer and self.life_player1 == 0 and (not self.game.network.connected or self.life_player2 == 0) and not self.death_delay:
+            self.death_delay = True
+            self.death_delay_timer = 2 * FPS    # 2 segundos de delay
 
        
 
@@ -928,6 +988,18 @@ class GameState:
 
     # Método para desenhar o jogo
     def draw(self):
+        # Se o jogo acabou
+        if self.game_over:
+            # pinta tudo de preto
+            pyxel.cls(0)
+            # escreve no centro
+            txt = "FIM DE JOGO"
+            w = len(txt) * 4   # aprox largura em px de cada caractere
+            x = (SCREEN_WIDTH  - w) // 2
+            y = (SCREEN_HEIGHT - 8) // 2  # 8px de altura de texto
+            pyxel.text(x, y, txt, 7)
+            return
+
         pyxel.cls(COLOR_BG)                                   # Limpa a tela com a cor de fundo definida
         
         # Separador da HUD (linha que divide o jogo da interface)
@@ -960,38 +1032,40 @@ class GameState:
         should_draw_j2 = (self.invincible_timer_j2 // 5) % 2 == 0 if self.invincible_timer_j2 > 0 else True  # Define se o jogador 2 deve piscar (quando invencível)
 
         if self.is_multiplayer:
-            # Renderização do jogador 1
-            if should_draw_j1:             # Verifica se é multiplayer E se deve desenhar o jogador 1
-                if self.is_host:                                  # Se for o host (jogador 1)
-                    pyxel.blt(self.player_x, self.player_y, 0, 32, 0, PLAYER_WIDTH, PLAYER_HEIGHT, colkey=0)  # Desenha o avião (host)
-                else:                                              # Se for o cliente
-                    pyxel.blt(self.player2_x, self.player2_y, 0, 32, 0, PLAYER_WIDTH, PLAYER_HEIGHT, colkey=0)  # Desenha o avião do host na posição recebida
-
-            # Renderização do jogador 2 (helicóptero)
-            if should_draw_j2:
-                # Animação da hélice (alterna entre dois frames a cada 5 frames)
-                helicopter_frame = (pyxel.frame_count // 5) % 2
+            if self.life_player1 > 0:
+                # Renderização do jogador 1
+                if should_draw_j1:             # Verifica se é multiplayer E se deve desenhar o jogador 1
+                    if self.is_host:                                  # Se for o host (jogador 1)
+                        pyxel.blt(self.player_x, self.player_y, 0, 32, 0, PLAYER_WIDTH, PLAYER_HEIGHT, colkey=0)  # Desenha o avião (host)
+                    else:                                              # Se for o cliente
+                        pyxel.blt(self.player2_x, self.player2_y, 0, 32, 0, PLAYER_WIDTH, PLAYER_HEIGHT, colkey=0)  # Desenha o avião do host na posição recebida
                 
-                # Coordenadas dos frames na imagem (48,0) e (0,16)
-                u = 48 if helicopter_frame == 0 else 0
-                v = 0 if helicopter_frame == 0 else 16
+            if self.game.network.connected and self.life_player2 > 0:
+                # Renderização do jogador 2 (helicóptero)
+                if should_draw_j2:
+                    # Animação da hélice (alterna entre dois frames a cada 5 frames)
+                    helicopter_frame = (pyxel.frame_count // 5) % 2
+                    
+                    # Coordenadas dos frames na imagem (48,0) e (0,16)
+                    u = 48 if helicopter_frame == 0 else 0
+                    v = 0 if helicopter_frame == 0 else 16
 
-                if self.is_host:
-                    pyxel.blt(
-                        self.player2_x, self.player2_y,
-                        0,            # Banco de imagens
-                        u, v,         # Coordenadas do frame
-                        PLAYER_WIDTH, PLAYER_HEIGHT,
-                        colkey=0
-                    )
-                else:
-                    pyxel.blt(
-                        self.player_x, self.player_y,
-                        0,            # Banco de imagens
-                        u, v,         # Coordenadas do frame
-                        PLAYER_WIDTH, PLAYER_HEIGHT,
-                        colkey=0
-                    )
+                    if self.is_host:
+                        pyxel.blt(
+                            self.player2_x, self.player2_y,
+                            0,            # Banco de imagens
+                            u, v,         # Coordenadas do frame
+                            PLAYER_WIDTH, PLAYER_HEIGHT,
+                            colkey=0
+                        )
+                    else:
+                        pyxel.blt(
+                            self.player_x, self.player_y,
+                            0,            # Banco de imagens
+                            u, v,         # Coordenadas do frame
+                            PLAYER_WIDTH, PLAYER_HEIGHT,
+                            colkey=0
+                        )
 
             
             # Status da conexão
@@ -1002,7 +1076,8 @@ class GameState:
 
         # Modo singleplayer
         else:
-            if should_draw_j1:         # Se não for multiplayer E deve desenhar o jogador
+            # Se não for multiplayer E deve desenhar o jogador e jogador tem vida maior que zero
+            if should_draw_j1 and self.life_player1 > 0:         
                 pyxel.blt(self.player_x, self.player_y, 0, 32, 0, PLAYER_WIDTH, PLAYER_HEIGHT, colkey=0)  # Desenha o jogador único
 
         # Desativa o clip (volta ao desenho em tela cheia)
@@ -1021,49 +1096,67 @@ class GameState:
 
             # Posicao Y inicial das barras (2px abaixo do separador da HUD)
             y_bar = sep_y + 2
-
-
-            # Barra de combustivel - Jogador 1
-            # desenha barra do jogador 1
-            pyxel.rectb(x1, y_bar, bar_w, FUEL_BAR_H, COLOR_FUEL_BORDER) # Desenha borda da barra
-            filled1 = int((self.fuel_player1 / MAX_FUEL) * (bar_w - 2)) # Calcula o nivel de preenchimento da barra
-            pyxel.rect(x1 + 1, y_bar + 1, filled1, FUEL_BAR_H - 2, COLOR_FUEL) # Preenche proporcionalmente a barra de gasolina
-
-            # Barra de combustivel - Jogador 2 
-            pyxel.rectb(x2, y_bar, bar_w, FUEL_BAR_H, COLOR_FUEL_BORDER) # Desenha borda da barra
-            filled2 = int((self.fuel_player2 / MAX_FUEL) * (bar_w - 2)) # Calcula o nivel de preenchimento da barra
-            pyxel.rect(x2 + 1, y_bar + 1, filled2, FUEL_BAR_H - 2, COLOR_FUEL) # Preenche proporcionalmente a barra de gasolina
-
             # Coracoes (vidas) em baixo das barras de gasolina
             y_heart = y_bar + FUEL_BAR_H + 2 # Posicao Y dos coracoes
-
-            # Coracao - Jogador 1
             # Centraliza coracao abaixo da barra
             total_heart_w = MAX_LIVES * HEART_SIZE + (MAX_LIVES - 1) * HEART_GAP # Largura total dos coracoes
-            start_x1 = x1 + (bar_w - total_heart_w) // 2 # Calcula posicao inicial para centralizar
-
             
+            # Desenha HUD do jogador 1 se ele estiver vivo
+            if self.life_player1 > 0:
+                # Barra de combustivel - Jogador 1
+                # desenha barra do jogador 1
+                pyxel.rectb(x1, y_bar, bar_w, FUEL_BAR_H, COLOR_FUEL_BORDER) # Desenha borda da barra
+                filled1 = int((self.fuel_player1 / MAX_FUEL) * (bar_w - 2)) # Calcula o nivel de preenchimento da barra
+                pyxel.rect(x1 + 1, y_bar + 1, filled1, FUEL_BAR_H - 2, COLOR_FUEL) # Preenche proporcionalmente a barra de gasolina
 
-            # Desenha cada coracao (cheio ou vazio)
-            for i in range(MAX_LIVES):
-                cx = start_x1 + i * (HEART_SIZE + HEART_GAP) # Posicao X do coracao atual
+                # Coracao - Jogador 1
+                start_x1 = x1 + (bar_w - total_heart_w) // 2 # Calcula posicao inicial para centralizar
 
-                if self.life_player1 > i:
-                    pyxel.blt(cx, y_heart, 0, 0, 32, HEART_SIZE, HEART_SIZE, colkey=0)  # Desenha coracao cheio
-                else:
-                    pyxel.blt(cx, y_heart, 0, 8, 32, HEART_SIZE, HEART_SIZE, colkey=0)  # Desenha coracao vazio
+                # Desenha cada coracao (cheio ou vazio)
+                for i in range(MAX_LIVES):
+                    cx = start_x1 + i * (HEART_SIZE + HEART_GAP) # Posicao X do coracao atual
 
-            # Coracao - Jogador 2 (ja foi calculado a largura total dos coracoes)
-            start_x2 = x2 + (bar_w - total_heart_w) // 2 # Calcula posicao inicial para centralizar
+                    if self.life_player1 > i:
+                        pyxel.blt(cx, y_heart, 0, 0, 32, HEART_SIZE, HEART_SIZE, colkey=0)  # Desenha coracao cheio
+                    else:
+                        pyxel.blt(cx, y_heart, 0, 8, 32, HEART_SIZE, HEART_SIZE, colkey=0)  # Desenha coracao vazio
+                
+                # Pontuação jogador 1
+                pyxel.text(
+                    x1,                     # x centralizado
+                    y_bar + FUEL_BAR_H + HEART_SIZE + 4,   # 1px abaixo dos corações
+                    f"Score P1: {self.score_player1}",
+                    COLOR_TEXT
+                )
 
-            # Desenha cada coracao (cheio ou vazio)
-            for i in range(MAX_LIVES):
-                cx = start_x2 + i * (HEART_SIZE + HEART_GAP) # Posicao X do coracao atual
+            # Desenha HUD do jogador 2 se ele estiver vivo e o jogo conectado
+            if self.game.network.connected and self.life_player2 > 0:
 
-                if self.life_player1 > i:
-                    pyxel.blt(cx, y_heart, 0, 0, 32, HEART_SIZE, HEART_SIZE, colkey=0)  # Desenha coracao cheio
-                else:
-                    pyxel.blt(cx, y_heart, 0, 8, 32, HEART_SIZE, HEART_SIZE, colkey=0)  # Desenha coracao vazio
+                # Barra de combustivel - Jogador 2 
+                pyxel.rectb(x2, y_bar, bar_w, FUEL_BAR_H, COLOR_FUEL_BORDER) # Desenha borda da barra
+                filled2 = int((self.fuel_player2 / MAX_FUEL) * (bar_w - 2)) # Calcula o nivel de preenchimento da barra
+                pyxel.rect(x2 + 1, y_bar + 1, filled2, FUEL_BAR_H - 2, COLOR_FUEL) # Preenche proporcionalmente a barra de gasolina
+
+
+                # Coracao - Jogador 2 (ja foi calculado a largura total dos coracoes)
+                start_x2 = x2 + (bar_w - total_heart_w) // 2 # Calcula posicao inicial para centralizar
+
+                # Desenha cada coracao (cheio ou vazio)
+                for i in range(MAX_LIVES):
+                    cx = start_x2 + i * (HEART_SIZE + HEART_GAP) # Posicao X do coracao atual
+
+                    if self.life_player2 > i:
+                        pyxel.blt(cx, y_heart, 0, 0, 32, HEART_SIZE, HEART_SIZE, colkey=0)  # Desenha coracao cheio
+                    else:
+                        pyxel.blt(cx, y_heart, 0, 8, 32, HEART_SIZE, HEART_SIZE, colkey=0)  # Desenha coracao vazio
+
+                # Pontuação jogador 2
+                pyxel.text(
+                    x2,                     # x centralizado
+                    y_bar + FUEL_BAR_H + HEART_SIZE + 4,   # 1px abaixo dos corações
+                    f"Score P2: {self.score_player2}",
+                    COLOR_TEXT
+                )
 
         # HUD para modo singleplayer
         else:
@@ -1071,22 +1164,32 @@ class GameState:
             cx = (SCREEN_WIDTH - FUEL_BAR_W) // 2 # Centraliza caoracao em 'X' na horizontal
             y_bar = sep_y + 2 # Posicao Y inicial das barras de gasolina (2px abaixo do separador da HUD)
 
-            # Desenha uma unica barra de combustivel:
-            pyxel.rectb(cx, y_bar, FUEL_BAR_W, FUEL_BAR_H, COLOR_FUEL_BORDER) # Desenha borda da barra
-            filled = int((self.fuel_player1 / MAX_FUEL) * (FUEL_BAR_W - 2)) # Calcula o nivel de preenchimento da barra
-            pyxel.rect(cx+1, y_bar+1, filled, FUEL_BAR_H-2, COLOR_FUEL) # Preenche proporcionalmente a barra de gasolina
+            # Desenha HUD do jogador 1 se ele estiver vivo
+            if self.life_player1 > 0:
+                # Desenha uma unica barra de combustivel:
+                pyxel.rectb(cx, y_bar, FUEL_BAR_W, FUEL_BAR_H, COLOR_FUEL_BORDER) # Desenha borda da barra
+                filled = int((self.fuel_player1 / MAX_FUEL) * (FUEL_BAR_W - 2)) # Calcula o nivel de preenchimento da barra
+                pyxel.rect(cx+1, y_bar+1, filled, FUEL_BAR_H-2, COLOR_FUEL) # Preenche proporcionalmente a barra de gasolina
 
-            # Coracoes
-            y_heart = y_bar + FUEL_BAR_H + 2 # Posicao Y dos coracoes (em baixo da barra de gasolina)
-            start_x = (SCREEN_WIDTH - (MAX_LIVES*HEART_SIZE + (MAX_LIVES-1)*HEART_GAP)) // 2 # Calcula posicao inicial dos coracoes para centralizar
+                # Coracoes
+                y_heart = y_bar + FUEL_BAR_H + 2 # Posicao Y dos coracoes (em baixo da barra de gasolina)
+                start_x = (SCREEN_WIDTH - (MAX_LIVES*HEART_SIZE + (MAX_LIVES-1)*HEART_GAP)) // 2 # Calcula posicao inicial dos coracoes para centralizar
 
-            # Desenha cada coracao (cheio ou vazio)
-            for i in range(MAX_LIVES): 
-                xh = start_x + i*(HEART_SIZE + HEART_GAP) # Posicao X do coracao atual
-                if self.life_player1 > i:
-                    pyxel.blt(xh, y_heart, 0, 0, 32, HEART_SIZE, HEART_SIZE, colkey=0)  # Desenha coracao cheio
-                else:
-                    pyxel.blt(xh, y_heart, 0, 8, 32, HEART_SIZE, HEART_SIZE, colkey=0)  # Desenha coracao vazio
+                # Desenha cada coracao (cheio ou vazio)
+                for i in range(MAX_LIVES): 
+                    xh = start_x + i*(HEART_SIZE + HEART_GAP) # Posicao X do coracao atual
+                    if self.life_player1 > i:
+                        pyxel.blt(xh, y_heart, 0, 0, 32, HEART_SIZE, HEART_SIZE, colkey=0)  # Desenha coracao cheio
+                    else:
+                        pyxel.blt(xh, y_heart, 0, 8, 32, HEART_SIZE, HEART_SIZE, colkey=0)  # Desenha coracao vazio
+
+                # Pontuação Singleplayer
+                pyxel.text(
+                    cx,                     # x centralizado
+                    y_bar + FUEL_BAR_H + HEART_SIZE + 4,   # 1px abaixo dos corações
+                    f"Score: {self.score_player1}",
+                    COLOR_TEXT
+                )
 
         # # Debug: mostra posições
         # if self.is_host:                                       # Se for o host
@@ -1107,210 +1210,3 @@ class GameState:
         # # # Debug: hitbox do jogador 1
         # pyxel.rectb(self.player_x, self.player_y, PLAYER_WIDTH, PLAYER_HEIGHT, 8)  # Desenha retângulo da hitbox do jogador 1
 
-# Classe que gerencia o cenário do jogo (rio e margens)
-class Background:
-    def __init__(self, is_host=False , is_multiplayer=False):
-        self.is_host = is_host
-        self.is_multiplayer = is_multiplayer
-
-        # movimento vertical
-        self.velocidade_scroll = 1
-        self.deslocamento = 0
-
-        # largura do rio (agora animável)
-        self.largura_rio = 45
-        self.target_largura = self.largura_rio        # ← alvo para animação de largura
-        self.largura_speed = .5                      # ← velocidade de ajuste da largura
-
-        # centro do rio (já existente)
-        self.centro_rio_x = pyxel.width / 2
-        self.target_centro_x = self.centro_rio_x
-        self.curve_speed = .5
-
-        # histórico para “descer” curvas e larguras do topo
-        self.centros_hist = deque([self.centro_rio_x] * pyxel.height,
-                                  maxlen=pyxel.height)
-        self.largura_hist = deque([self.largura_rio] * pyxel.height,
-                                  maxlen=pyxel.height)       # ← novo
-
-        self.cor_borda = 15
-        self.pontos_brancos = [(3, 2), (10, 5), (15, 8), (25, 3), (30, 7), 
-                             (5, 14), (20, 12), (28, 16), (12, 20), (18, 18)]
-        self.tree_manager = TreeManager(self)
-
-
-        # Novo estado para controle da animação
-        self.animating_to_center = False
-        self.max_largura = pyxel.width - 30  # Largura máxima igual ao KEY_3
-
-        self.comandos = deque([
-            ("KEY_1", 1),   # ← só 1 frame pressionado
-            ("WAIT", 150),
-            ("KEY_1", 1),
-            ("WAIT", 150),
-            ("KEY_3", 1),
-            ("WAIT", 300),
-            ("KEY_2", 1),
-            ("WAIT", 150),
-            ("KEY_2", 1),
-            ("WAIT", 150),
-            ("KEY_2", 1),
-            ("WAIT", 150),
-            ("KEY_2", 1),
-            ("WAIT", 150),
-            ("KEY_2", 1),
-            ("WAIT", 150),
-            ("KEY_4", 1),
-            ("WAIT", 300),
-            ("KEY_4", 1),
-            ("WAIT", 300),
-            ("KEY_4", 1),
-            ("WAIT", 300),
-            ("KEY_1", 1),
-            ("WAIT", 60),
-            ("KEY_1", 1),
-            ("WAIT", 60),
-            ("KEY_1", 1),
-            ("WAIT", 60),
-            ("KEY_2", 1),
-            ("WAIT", 60),
-            ("KEY_1", 1),
-            ("WAIT", 60),
-            ("KEY_2", 1),
-            ("WAIT", 60),
-            ("KEY_1", 1),
-            ("WAIT", 60),
-            ("KEY_2", 1),
-            ("WAIT", 60),
-            ("KEY_5", 1),
-            ("WAIT", 120),
-        ])
-        self.tempo_comando = 0
-
-    def executar_comando_simulado(self):
-        if not self.comandos:
-            return
-
-        comando, duracao = self.comandos[0]
-
-        if comando == "WAIT":
-            self.tempo_comando += 1
-            if self.tempo_comando >= duracao:
-                self.comandos.popleft()
-                self.tempo_comando = 0
-        else:
-            # Executa o comando por 1 frame
-            if comando == "KEY_1":
-                self.target_centro_x = min(self.target_centro_x + 30, pyxel.width - self.largura_rio / 2)
-            elif comando == "KEY_2":
-                self.target_centro_x = max(self.target_centro_x - 30, self.largura_rio / 2)
-            elif comando == "KEY_3":
-                self.target_largura = min(self.target_largura + 10, self.max_largura)
-            elif comando == "KEY_4":
-                self.target_largura = max(self.target_largura - 10, 20)
-            elif comando == "KEY_5":
-                self.animating_to_center = True
-                self.target_centro_x = pyxel.width / 2
-                self.target_largura = 45
-
-            # Remove imediatamente após 1 frame
-            self.comandos.popleft()
-            self.tempo_comando = 0
-
-    def obter_margens_rio(self, screen_y):
-        centro = self.centros_hist[screen_y]
-        largura = self.largura_hist[screen_y]           # ← histórico de largura
-        meia = largura / 2
-        return centro - meia, centro + meia
-
-    def update(self):
-        
-        if self.is_host or not self.is_multiplayer:
-            # —–– curvar (1/2)
-            if pyxel.btnp(pyxel.KEY_1):
-                self.target_centro_x = min(self.target_centro_x + 30,
-                                        pyxel.width - self.largura_rio/2)
-            if pyxel.btnp(pyxel.KEY_2):
-                self.target_centro_x = max(self.target_centro_x - 30,
-                                        self.largura_rio/2)
-
-            # —–– ajustar centro suavemente
-            diff_c = self.target_centro_x - self.centro_rio_x
-            if abs(diff_c) > self.curve_speed:
-                self.centro_rio_x += self.curve_speed * (1 if diff_c > 0 else -1)
-            else:
-                self.centro_rio_x = self.target_centro_x
-
-            # —–– largura (3/4)
-            if pyxel.btnp(pyxel.KEY_3):
-                # aumenta até um máximo (por ex. metade da largura da tela)
-                self.target_largura = min(self.target_largura + 10,
-                                        self.max_largura)
-                
-            if pyxel.btnp(pyxel.KEY_4):
-                # diminui até um mínimo (por ex. 20 px)
-                self.target_largura = max(self.target_largura - 10, 20)
-
-            # Novo controle KEY_5
-            if pyxel.btnp(pyxel.KEY_5):
-                self.animating_to_center = True
-                self.target_centro_x = pyxel.width / 2  # Primeiro centraliza
-                self.target_largura = 45  # Reset para largura inicial
-                
-
-            self.executar_comando_simulado()
-
-            # atualiza árvores
-            self.tree_manager.update_arvores(self.velocidade_scroll)
-        
-        # Lógica da animação automática
-        if self.animating_to_center:
-            # Verifica se já centralizou
-            if abs(self.centro_rio_x - pyxel.width/2) < 1:
-                # Começa a expandir após centralizar
-                self.target_largura = self.max_largura
-                
-                # Desativa a animação quando chegar na largura máxima
-                if abs(self.largura_rio - self.max_largura) < 1:
-                    self.animating_to_center = False
-            else:
-                # Mantém largura pequena durante a centralização
-                self.target_largura = 45
-
-        diff_l = self.target_largura - self.largura_rio
-        if abs(diff_l) > self.largura_speed:
-            self.largura_rio += self.largura_speed * (1 if diff_l > 0 else -1)
-        else:
-            self.largura_rio = self.target_largura
-
-        # —–– atualizar históricos
-        self.centros_hist.appendleft(self.centro_rio_x)
-        self.largura_hist.appendleft(self.largura_rio)   # ← novo
-        
-        
-        self.deslocamento += self.velocidade_scroll
-
-       
-    def draw(self):
-        pyxel.rect(0, 0, pyxel.width, pyxel.height, 9)
-        for screen_y in range(pyxel.height):
-            esq, dir = self.obter_margens_rio(screen_y)
-            # bordas
-            for i in range(4):
-                pyxel.line(int(esq)-i, screen_y, int(esq), screen_y,
-                           self.cor_borda)
-                pyxel.line(int(dir), screen_y, int(dir)+i, screen_y,
-                           self.cor_borda)
-            # água
-            pyxel.line(int(esq), screen_y, int(dir), screen_y, 12)
-            # reflexos
-            for dx, dy in self.pontos_brancos:
-                pattern_y = (screen_y - self.deslocamento + dy) % 24
-                if pattern_y == dy:
-                    largura_atual = dir - esq
-                    if largura_atual > 0:
-                        x = esq + (dx % largura_atual)
-                    if esq < x < dir:
-                        pyxel.pset(int(x), screen_y, 7)
-        
-        self.tree_manager.draw_arvores()

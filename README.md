@@ -4,6 +4,9 @@ Trabalho 1 de Redes de Computadores
 ## Biblioteca utilizada:
 Este projeto utiliza a biblioteca [Pyxel - GitHub](https://github.com/kitao/pyxel)
 
+## Criadores
+- Gabriel Neves Silveira
+- Daniel Pedro Elias do Santos
 
 ## Requisitos do Projeto
 - O jogo deve ser desenvolvido em **Python**.
